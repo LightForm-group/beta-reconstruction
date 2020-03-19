@@ -2,141 +2,202 @@ import numpy as np
 
 from defdap.quat import Quat
 
-from beta_reconstruction.crystal_relations import reduced_hex_symms, reduced_cubic_symms, burgers_trans
+from beta_reconstruction.crystal_relations import (
+    unq_hex_syms, unq_cub_syms, burg_trans
+)
 
 
-def calculate_beta_oris(alpha_ori):
+def calc_beta_oris(alpha_ori):
+    """Calculate the possible beta orientations for a given alpha
+    orientation using the Burgers relation and crystal symmetries.
+
+    Parameters
+    ----------
+    alpha_ori : defdap.Quat.quat
+        Orientation of an alpha grain
+
+    Returns
+    -------
+    beta_oris : list of defdap.Quat.quat
+        List of possible beta orientations
+    """
     beta_oris = []
 
-    for symm in reduced_hex_symms:
-        beta_oris.append(burgers_trans * symm.conjugate * alpha_ori)
+    for sym in unq_hex_syms:
+        beta_oris.append(burg_trans * sym.conjugate * alpha_ori)
 
     return beta_oris
 
 
+def construct_quat_comps(oris):
+    """Construct an array of the quaternion components from input list
+
+    Parameters
+    ----------
+    oris : list of defdap.Quat.quat (or other 1D enumerable type)
+        Orientations to return the quaternion components of
+
+    Returns
+    -------
+    quat_comps : np.ndarray
+        Array of quaternion components, shape (4, n)
+
+    """
+    quat_comps = np.empty((4, len(oris)))
+    for i, ori in enumerate(oris):
+        quat_comps[:, i] = ori.quatCoef
+
+    return quat_comps
 
 
-def do_reconstruction(maxDevFromBurgers=5, oriTo=3):
+def report_progress(curr, total):
+    """Report the progress of the reconstruction process
 
-    cubicSymComps = np.empty((4, len(cubicFundSymms)))
-    for i, cubicSymm in enumerate(cubicFundSymms):
-        cubicSymComps[:, i] = cubicSymm.quatCoef
+    Parameters
+    ----------
+    curr : int
+        Index of current grain
+    total : int
+        Total number of grains
+    """
+    int(round(total / 100))
+    if curr % int(round(total / 100)) == 0:
+        print("\r Done {:} %".format(curr / total * 100))
+        # print("\r Grain number {} of {}".format(grain_id + 1, num_grains),
+        #       end="")
 
-    numGrains = len(EbsdMap)
-    for grainID, grain in enumerate(EbsdMap):
-        # if True:
-        if grainID % 10 == 0:
-            print("\r Grain number {} of {}".format(grainID + 1, numGrains),
-                  end="")
+
+def calc_beta_oris_from_misori(alpha_ori, neighbour_oris):
+    """Calculate the possible beta orientations for a given alpha
+    orientation using the misorientaion relation to neighbour orientations.
+
+    Parameters
+    ----------
+    alpha_ori : defdap.Quat.quat
+    neighbour_oris : list of defdap.Quat.quat
+
+    Returns
+    -------
+    beta_oris : list of defdap.Quat.quat
+        List of possible beta orientations
+    """
+    # This needed to move further up calculation process
+    reduced_cub_sym_comps = construct_quat_comps(unq_cub_syms)
+
+    alpha_ori_inv = alpha_ori.conjugate
+
+    # loop over neighbour_oris
+
+    for neighbour_ori in neighbour_oris:
+
+        a2a1inv = neighbour_ori * alpha_ori_inv
+
+        mis144 = np.zeros((12, 12))
+        RCS144 = np.zeros((12, 12), dtype=int)
+
+        # calculate all possible S^B_m (eqn 11. from [1]) from the
+        # measured misorientation from 2 neighbour alpha grains
+        # for each S^B_m calculate the 'closest' cubic symmetry
+        # (from reduced subset) and the deviation from this symmetry
+        for i, hex_sym in enumerate(unq_hex_syms):
+            dummy = a2a1inv * hex_sym
+
+            for j, hex_sym_2 in enumerate(unq_hex_syms):
+                Bvariant = burg_trans * ((hex_sym_2.conjugate * dummy) * burg_trans.conjugate)
+
+                misOris = np.einsum("ij,i->j", reduced_cub_sym_comps, Bvariant.quatCoef)
+
+                #                 misOris = []
+                #                 for cubicSymm in cubicFundSymms:
+                #                     misOri = Bvariant.dot(cubicSymm)
+                #                     misOris.append(misOri)
+                #                 misOris = np.abs(np.array(misOris))
+
+                misOris = np.abs(misOris)
+                misOris[misOris > 1] = 1.
+                misOris = 2 * np.arccos(misOris) * 180 / np.pi
+
+                minMisOriIdx = np.argmin(misOris)
+                mis144[i, j] = misOris[minMisOriIdx]
+                RCS144[i, j] = minMisOriIdx
+
+        # find the hex symmetries (i, j) from give the minimum
+        # deviation from the burgers relation for the minimum store:
+        # the deviation, the hex symmetries (i, j) and the cubic
+        # symmetry if the deviation is over a threshold then set
+        # cubic symmetry to -1
+        minMisOriIdx = np.unravel_index(np.argmin(mis144), mis144.shape)
+        devFromBurgers = mis144[minMisOriIdx]
+        cubicSymmIndx = RCS144[minMisOriIdx] if devFromBurgers < maxDevFromBurgers else -1
+        a1Symm = minMisOriIdx[0]
+        a2Symm = minMisOriIdx[1]
+        #         print(devFromBurgers, cubicSymmIndx)
+
+        #         with np.printoptions(precision=2, suppress=True, linewidth=100):
+        #             print(minMisOriIdx)
+        #             print(mis144)
+        #             print(devFromBurgers)
+        #             print(RCS144)
+        #             print(cubicSymmIndx)
+        #             print(" ")
+
+        possibleBetaOris = []
+        if cubicSymmIndx > -1 and cubicSymmIndx < 9:
+            # one possible beta orientation
+            # A:
+            possibleBetaOris.append(
+                burg_trans * unq_hex_syms[a1Symm].conjugate * grain.refOri
+            )
+
+        elif cubicSymmIndx == 9:
+            # three possible beta orientation
+            # A:
+            possibleBetaOris.append(
+                burg_trans * unq_hex_syms[a1Symm].conjugate * grain.refOri
+            )
+            # B:
+            # hexFundSymms[1] is C^+_3z
+            possibleBetaOris.append(
+                burg_trans * unq_hex_syms[1].conjugate * unq_hex_syms[a1Symm].conjugate * grain.refOri
+            )
+            # C:
+            # hexFundSymms[2] is C^+_6z
+            possibleBetaOris.append(
+                burg_trans * unq_hex_syms[2].conjugate * unq_hex_syms[a1Symm].conjugate * grain.refOri
+            )
+
+        elif cubicSymmIndx > 9:
+            # two possible beta orientation
+            # A:
+            possibleBetaOris.append(
+                burg_trans * unq_hex_syms[a1Symm].conjugate * grain.refOri
+            )
+            # D:
+            # hexFundSymms[4] is C'_22
+            possibleBetaOris.append(
+                burg_trans * hexFundSymms[4].conjugate * unq_hex_syms[a1Symm].conjugate * grain.refOri
+            )
+
+        grain.possibleBetaOris.append(possibleBetaOris)
+        grain.betaDeviations.append(devFromBurgers)
+
+
+def do_reconstruction(ebsd_map, maxDevFromBurgers=5, oriTo=3):
+
+    num_grains = len(ebsd_map)
+    for grain_id, grain in enumerate(ebsd_map):
+        report_progress(grain_id, num_grains)
 
         grain.possibleBetaOris = []
         grain.betaDeviations = []
 
-        neighbourIDs = list(EbsdMap.neighbourNetwork.neighbors(grainID))
-        neighbourGrains = [EbsdMap[i] for i in neighbourIDs]
+        neighbour_ids = list(ebsd_map.neighbourNetwork.neighbors(grain_id))
+        neighbour_oris = [ebsd_map[i].refOri for i in neighbour_ids]
 
-        grainInvOri = grain.refOri.conjugate
+        calc_beta_oris_from_misori(grain.refOri, neighbour_oris)
 
-        for neighbourID, neighbourGrain in zip(neighbourIDs, neighbourGrains):
-            #         if neighbourID != 479:
-            #             continue
 
-            neighbourGrainOri = neighbourGrain.refOri
-
-            a2a1inv = neighbourGrainOri * grainInvOri
-
-            mis144 = np.zeros((12, 12))
-            RCS144 = np.zeros((12, 12), dtype=int)
-
-            # calculate all posible S^B_m (eqn 11. from [1]) from the measured misorientation from 2 neighbour alpha grains
-            # for each S^B_m calculate the 'closest' cubic symmetry (from subset) and the deviation from this symmetry
-            for i, hexSymm in enumerate(hexSymms):
-                dummy = a2a1inv * hexSymm
-
-                for j, hexSymm2 in enumerate(hexSymms):
-                    Bvariant = burgersQuat * ((
-                                                          hexSymm2.conjugate * dummy) * burgersQuat.conjugate)
-
-                    misOris = np.einsum("ij,i->j", cubicSymComps,
-                                        Bvariant.quatCoef)
-
-                    #                 misOris = []
-                    #                 for cubicSymm in cubicFundSymms:
-                    #                     misOri = Bvariant.dot(cubicSymm)
-                    #                     misOris.append(misOri)
-                    #                 misOris = np.abs(np.array(misOris))
-
-                    misOris = np.abs(misOris)
-                    misOris[misOris > 1] = 1.
-                    misOris = 2 * np.arccos(misOris) * 180 / np.pi
-
-                    minMisOriIdx = np.argmin(misOris)
-                    mis144[i, j] = misOris[minMisOriIdx]
-                    RCS144[i, j] = minMisOriIdx
-
-            # find the hex symmetries (i, j) from give the minimum deviation from the burgers relation
-            # for the minimum store: the deviation, the hex symmetries (i, j) and the cubic symmetry
-            # if the deviation is over a threshold then set cubic symmetry to -1
-            minMisOriIdx = np.unravel_index(np.argmin(mis144), mis144.shape)
-            devFromBurgers = mis144[minMisOriIdx]
-            cubicSymmIndx = RCS144[
-                minMisOriIdx] if devFromBurgers < maxDevFromBurgers else -1
-            a1Symm = minMisOriIdx[0]
-            a2Symm = minMisOriIdx[1]
-            #         print(devFromBurgers, cubicSymmIndx)
-
-            #         with np.printoptions(precision=2, suppress=True, linewidth=100):
-            #             print(minMisOriIdx)
-            #             print(mis144)
-            #             print(devFromBurgers)
-            #             print(RCS144)
-            #             print(cubicSymmIndx)
-            #             print(" ")
-
-            possibleBetaOris = []
-            if cubicSymmIndx > -1 and cubicSymmIndx < 9:
-                # one possible beta orientation
-                # A:
-                possibleBetaOris.append(
-                    burgersQuat * hexSymms[a1Symm].conjugate * grain.refOri
-                )
-
-            elif cubicSymmIndx == 9:
-                # three possible beta orientation
-                # A:
-                possibleBetaOris.append(
-                    burgersQuat * hexSymms[a1Symm].conjugate * grain.refOri
-                )
-                # B:
-                # hexFundSymms[1] is C^+_3z
-                possibleBetaOris.append(
-                    burgersQuat * hexFundSymms[1].conjugate * hexSymms[
-                        a1Symm].conjugate * grain.refOri
-                )
-                # C:
-                # hexFundSymms[2] is C^+_6z
-                possibleBetaOris.append(
-                    burgersQuat * hexFundSymms[2].conjugate * hexSymms[
-                        a1Symm].conjugate * grain.refOri
-                )
-
-            elif cubicSymmIndx > 9:
-                # two possible beta orientation
-                # A:
-                possibleBetaOris.append(
-                    burgersQuat * hexSymms[a1Symm].conjugate * grain.refOri
-                )
-                # D:
-                # hexFundSymms[4] is C'_22
-                possibleBetaOris.append(
-                    burgersQuat * hexFundSymms[4].conjugate * hexSymms[
-                        a1Symm].conjugate * grain.refOri
-                )
-
-            grain.possibleBetaOris.append(possibleBetaOris)
-            grain.betaDeviations.append(devFromBurgers)
-
-        #         print(grainID, neighbourID)
+        #         print(grain_id, neighbourID)
         #         print(possibleBetaOris)
         #         print(devFromBurgers)
         #         break
@@ -172,7 +233,7 @@ def do_reconstruction(maxDevFromBurgers=5, oriTo=3):
                 else:
                     variantIndexes.append(-1)
                     print("Couldn't find beta variant. Grain {:}".format(
-                        grainID))
+                        grain_id))
 
         variantCount = [0, 0, 0, 0, 0, 0]
         for i in range(len(variantIndexes)):

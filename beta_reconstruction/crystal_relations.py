@@ -1,7 +1,10 @@
+import numpy as np
 from defdap.quat import Quat
 
 hex_symms = Quat.symEqv("hexagonal")
-reduced_hex_symms = [
+# subset of hexagonal symmetries that give a unique orientaions when the
+# Burgers transofmration is applied
+unq_hex_syms = [
     hex_symms[0],
     hex_symms[5],
     hex_symms[4],
@@ -11,7 +14,9 @@ reduced_hex_symms = [
 ]
 
 cubic_symms = Quat.symEqv("cubic")
-reduced_cubic_symms = [
+# subset of cubic symmetries that give a unique orientaions when the
+# Burgers transofmration is applied
+unq_cub_syms = [
     cubic_symms[0],
     cubic_symms[7],
     cubic_symms[9],
@@ -27,4 +32,4 @@ reduced_cubic_symms = [
 ]
 
 # HCP -> BCC
-burgers_trans = Quat(135*np.pi/180, 90*np.pi/180, 354.74*np.pi/180).conjugate
+burg_trans = Quat(135*np.pi/180, 90*np.pi/180, 354.74*np.pi/180).conjugate
