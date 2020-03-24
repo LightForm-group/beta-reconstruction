@@ -135,29 +135,73 @@ def calc_misori_of_variants(alpha_ori_inv, neighbour_ori, unq_cub_sym_comps):
     min_cub_sym_idx : np.ndarry
 
     """
-    a2a1inv = neighbour_ori * alpha_ori_inv
-
-    misoris = np.zeros((144, 12))
     # calculate all possible S^B_m (eqn 11. from [1]) from the
     # measured misorientation from 2 neighbour alpha grains
     # for each S^B_m calculate the 'closest' cubic symmetry
     # (from reduced subset) and the deviation from this symmetry
-    for i, hex_sym in enumerate(hex_syms):
-        dummy = a2a1inv * hex_sym
 
-        for j, hex_sym_2 in enumerate(hex_syms):
-            beta_var = burg_trans * ((hex_sym_2.conjugate * dummy) * burg_trans.conjugate)
+    # Vectorised calculation of:
+    # hex_sym[j].inv * ((neighbour_ori * alpha_ori_inv) * hex_sym[i])
+    # labelled: d = h2.inv * (c * h1)
+    hex_sym_comps = construct_quat_comps(hex_syms)
+    c = (neighbour_ori * alpha_ori_inv).quatCoef
+    h1 = np.repeat(hex_sym_comps, 12, axis=1)  # outer loop
+    h2 = np.tile(hex_sym_comps, (1, 12))  # inner loop
+    d = np.zeros_like(h1)
 
-            misoris[12*i + j] = np.einsum("ij,i->j", unq_cub_sym_comps,
-                                          beta_var.quatCoef)
+    c_dot_h1 = c[1]*h1[1] + c[2]*h1[2] + c[3]*h1[3]
+    c_dot_h2 = c[1]*h2[1] + c[2]*h2[2] + c[3]*h2[3]
+    h1_dot_h2 = h1[1]*h2[1] + h1[2]*h2[2] + h1[3]*h2[3]
 
+    d[0] = (c[0]*h1[0]*h2[0] - h2[0]*c_dot_h1 +
+            c[0]*h1_dot_h2 + h1[0]*c_dot_h2 +
+            h2[1] * (c[2]*h1[3] - c[3]*h1[2]) +
+            h2[2] * (c[3]*h1[1] - c[1]*h1[3]) +
+            h2[3] * (c[1]*h1[2] - c[2]*h1[1]))
+    d[1] = (c[0]*h2[0]*h1[1] + h1[0]*h2[0]*c[1] - c[0]*h1[0]*h2[1] +
+            c_dot_h1*h2[1] + c_dot_h2*h1[1] - h1_dot_h2*c[1] +
+            h2[0] * (c[2]*h1[3] - c[3]*h1[2]) +
+            c[0] * (h1[2]*h2[3] - h1[3]*h2[2]) +
+            h1[0] * (c[2]*h2[3] - c[3]*h2[2]))
+    d[2] = (c[0]*h2[0]*h1[2] + h1[0]*h2[0]*c[2] - c[0]*h1[0]*h2[2] +
+            c_dot_h1*h2[2] + c_dot_h2*h1[2] - h1_dot_h2*c[2] +
+            h2[0] * (c[3]*h1[1] - c[1]*h1[3]) +
+            c[0] * (h1[3]*h2[1] - h1[1]*h2[3]) +
+            h1[0] * (c[3]*h2[1] - c[1]*h2[3]))
+    d[3] = (c[0]*h2[0]*h1[3] + h1[0]*h2[0]*c[3] - c[0]*h1[0]*h2[3] +
+            c_dot_h1*h2[3] + c_dot_h2*h1[3] - h1_dot_h2*c[3] +
+            h2[0] * (c[1]*h1[2] - c[2] * h1[1]) +
+            c[0] * (h1[1]*h2[2] - h1[2] * h2[1]) +
+            h1[0] * (c[1]*h2[2] - c[2] * h2[1]))
+
+    # Vectorised calculation of:
+    # burg_trans * (d * burg_trans.inv)
+    # labelled: beta_vars = b * (c * b.inv)
+    b = burg_trans.quatCoef
+    beta_vars = np.zeros_like(h1)
+
+    b_dot_b = b[1]*b[1] + b[2]*b[2] + b[3]*b[3]
+    b_dot_d = b[1]*d[1] + b[2]*d[2] + b[3]*d[3]
+
+    beta_vars[0] = d[0] * (b[0]*b[0] + b_dot_b)
+    beta_vars[1] = (d[1] * (b[0]*b[0] - b_dot_b) + 2*b_dot_d*b[1] +
+                    2*b[0] * (b[2]*d[3] - b[3]*d[2]))
+    beta_vars[2] = (d[2] * (b[0]*b[0] - b_dot_b) + 2*b_dot_d*b[2] +
+                    2*b[0] * (b[3]*d[1] - b[1]*d[3]))
+    beta_vars[3] = (d[3] * (b[0]*b[0] - b_dot_b) + 2*b_dot_d*b[3] +
+                    2*b[0] * (b[1]*d[2] - b[2]*d[1]))
+
+    # calculate misorientation to each of the cubic symmetries
+    misoris = np.einsum("ij,ik->jk", beta_vars, unq_cub_sym_comps)
     misoris = np.abs(misoris)
     misoris[misoris > 1] = 1.
-    misoris = 2 * np.arccos(misoris) * 180 / np.pi
+    misoris = 2 * np.arccos(misoris)
 
+    # find the cubic symmetry with minimum misorientation for each of
+    # the beta misorientation variants
     min_cub_sym_idx = np.argmin(misoris, axis=1)
     min_misoris = misoris[np.arange(144), min_cub_sym_idx]
-
+    # reshape to 12 x 12 for each of the hex sym multiplications
     min_cub_sym_idx = min_cub_sym_idx.reshape((12, 12))
     min_misoris = min_misoris.reshape((12, 12))
 
@@ -204,10 +248,11 @@ def calc_beta_oris_from_misori(alpha_ori, neighbour_oris, burg_tol=5.):
         # the deviation, the hex symmetries (i, j) and the cubic
         # symmetry if the deviation is over a threshold then set
         # cubic symmetry to -1
-        min_misori_idx = np.unravel_index(np.argmin(min_misoris), min_misoris.shape)
+        min_misori_idx = np.unravel_index(np.argmin(min_misoris),
+                                          min_misoris.shape)
         burg_dev = min_misoris[min_misori_idx]
 
-        if burg_dev < burg_tol:
+        if burg_dev < burg_tol / 180 * np.pi:
             beta_oris.append(beta_oris_from_cub_sym(
                 alpha_ori, min_cub_sym_idxs[min_misori_idx], min_misori_idx[0]
             ))
@@ -243,7 +288,7 @@ def do_reconstruction(ebsd_map, burg_tol=5., ori_tol=3.):
         )
 
         # do all the accounting stuff
-        # divide 2 because of 2* in misorientation
+        # divide 2 because of 2* in misorientation definition
         ori_tol = np.cos(ori_tol / 2 * np.pi / 180.)
 
         allPossibleBetaOris = [item for sublist in grain.possibleBetaOris for
