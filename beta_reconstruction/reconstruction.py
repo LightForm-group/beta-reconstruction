@@ -1,4 +1,5 @@
 import numpy as np
+import warnings
 
 # from defdap.quat import Quat
 
@@ -60,7 +61,6 @@ def report_progress(curr, total):
     total : int
         Total number of grains
     """
-    int(round(total / 100))
     if curr % int(round(total / 100)) == 0:
         print("\r Done {:} %".format(int(curr / total * 100)), end="")
 
@@ -261,9 +261,63 @@ def calc_beta_oris_from_misori(alpha_ori, neighbour_oris, burg_tol=5.):
     return beta_oris, beta_devs
 
 
+def count_beta_variants(beta_oris, possible_beta_oris, grain_id, ori_tol):
+    """
+
+    Parameters
+    ----------
+    beta_oris
+    possible_beta_oris
+    grain_id
+    ori_tol
+
+    Returns
+    -------
+
+    """
+    # do all the accounting stuff
+    # divide 2 because of 2* in misorientation definition
+    ori_tol = np.cos(ori_tol / 2 * np.pi / 180.)
+    # flatten list of lists
+    possible_beta_oris = [item for sublist in possible_beta_oris
+                          for item in sublist]
+    unique_beta_oris = []
+    count_beta_oris = []
+    variant_idxs = []
+    for ori in possible_beta_oris:
+        found = False
+        for i, uniqueOri in enumerate(unique_beta_oris):
+            mis_ori = ori.misOri(uniqueOri, "cubic")
+            if mis_ori > ori_tol:
+                found = True
+                count_beta_oris[i] += 1
+
+        if not found:
+            unique_beta_oris.append(ori)
+            count_beta_oris.append(1)
+
+            for i, betaVariant in enumerate(beta_oris):
+                mis_ori = ori.misOri(betaVariant, "cubic")
+                if mis_ori > ori_tol:
+                    variant_idxs.append(i)
+                    break
+            else:
+                variant_idxs.append(-1)
+                warnings.warn("Couldn't find beta variant. "
+                              "Grain {:}".format(grain_id))
+
+    variant_count = [0, 0, 0, 0, 0, 0]
+    for i in range(len(variant_idxs)):
+        if variant_idxs[i] > -1:
+            variant_count[variant_idxs[i]] = count_beta_oris[i]
+
+    return variant_count
+
+
 def do_reconstruction(ebsd_map, burg_tol=5., ori_tol=3.):
-    """Apply beta reconstruction to a ebsd map object. Nothing is returned
-    and output is stored directly in the ebsd map (this should probably change)
+    """Apply beta reconstruction to a ebsd map object. Nothing is
+    returned and output is stored directly in the ebsd map (this should
+    probably change)
 
     Parameters
     ----------
@@ -274,54 +328,28 @@ def do_reconstruction(ebsd_map, burg_tol=5., ori_tol=3.):
     ori_tol: float
         Maximum deviation from a beta orientaion (degrees)
     """
+    # this is the only function that interacts with the ebsd map/grain objects
     num_grains = len(ebsd_map)
     for grain_id, grain in enumerate(ebsd_map):
         report_progress(grain_id, num_grains)
 
-        grain.betaOris = calc_beta_oris(grain.refOri)
+        beta_oris = calc_beta_oris(grain.refOri)
 
         neighbour_ids = list(ebsd_map.neighbourNetwork.neighbors(grain_id))
         neighbour_oris = [ebsd_map[i].refOri for i in neighbour_ids]
 
-        grain.possibleBetaOris, grain.betaDeviations = calc_beta_oris_from_misori(
+        # determine the possible beta orientations based on misorientation
+        # between neighbouring alpha grains
+        possible_beta_oris, beta_deviations = calc_beta_oris_from_misori(
             grain.refOri, neighbour_oris, burg_tol=burg_tol
         )
 
-        # do all the accounting stuff
-        # divide 2 because of 2* in misorientation definition
-        ori_tol = np.cos(ori_tol / 2 * np.pi / 180.)
+        variant_count = count_beta_variants(
+            beta_oris, possible_beta_oris, grain_id, ori_tol
+        )
 
-        allPossibleBetaOris = [item for sublist in grain.possibleBetaOris for
-                               item in sublist]
-        uniqueBetaOris = []
-        countBetaOris = []
-        variantIndexes = []
-
-        for ori in allPossibleBetaOris:
-            found = False
-            for i, uniqueOri in enumerate(uniqueBetaOris):
-                misOri = ori.misOri(uniqueOri, "cubic")
-                if misOri > ori_tol:
-                    found = True
-                    countBetaOris[i] += 1
-
-            if not found:
-                uniqueBetaOris.append(ori)
-                countBetaOris.append(1)
-
-                for i, betaVariant in enumerate(grain.betaOris):
-                    misOri = ori.misOri(betaVariant, "cubic")
-                    if misOri > ori_tol:
-                        variantIndexes.append(i)
-                        break
-                else:
-                    variantIndexes.append(-1)
-                    print("Couldn't find beta variant. Grain {:}".format(
-                        grain_id))
-
-        variantCount = [0, 0, 0, 0, 0, 0]
-        for i in range(len(variantIndexes)):
-            if i > -1:
-                variantCount[variantIndexes[i]] = countBetaOris[i]
-
-        grain.variantCount = variantCount
+        # save results in the grain objects
+        grain.betaOris = beta_oris
+        grain.possibleBetaOris = possible_beta_oris
+        grain.betaDeviations = beta_deviations
+        grain.variantCount = variant_count

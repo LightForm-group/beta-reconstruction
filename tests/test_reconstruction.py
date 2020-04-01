@@ -32,19 +32,32 @@ def ori_list_valid():
 @pytest.fixture
 def unq_cub_sym_comps():
     return np.array([
-        [1.,          0.,          0.,          0.],
-        [0.70710678,  0.,          0.,          0.70710678],
-        [0.70710678,  0.,          0.,         -0.70710678],
-        [0.70710678,  0.70710678,  0.,          0.],
-        [0.5,         0.5,         0.5,        -0.5],
-        [0.5,         0.5,         0.5,         0.5],
-        [0.,          0.70710678,  0.,          0.70710678],
-        [0.,          0.,         -0.70710678,  0.70710678],
-        [0.70710678,  0.,          0.70710678,  0.],
-        [0.,          0.,          0.,          1.],
-        [0.5,        -0.5,         0.5,        -0.5],
-        [0.5,         0.5,        -0.5,         0.5]
+        [1., 0., 0., 0.],
+        [0.70710678, 0., 0., 0.70710678],
+        [0.70710678, 0., 0., -0.70710678],
+        [0.70710678, 0.70710678, 0., 0.],
+        [0.5, 0.5, 0.5, -0.5],
+        [0.5, 0.5, 0.5, 0.5],
+        [0., 0.70710678, 0., 0.70710678],
+        [0., 0., -0.70710678, 0.70710678],
+        [0.70710678, 0., 0.70710678, 0.],
+        [0., 0., 0., 1.],
+        [0.5, -0.5, 0.5, -0.5],
+        [0.5, 0.5, -0.5, 0.5]
     ]).T
+
+
+@pytest.fixture
+def beta_oris():
+    # 6 beta ori for ori_single_valid above
+    return [
+        Quat(0.11460994,  0.97057328,  0.10987647, -0.18105038),
+        Quat(0.71894262,  0.52597293, -0.12611599,  0.43654181),
+        Quat(0.4812518,   0.86403135, -0.00937589,  0.14750805),
+        Quat(0.23608204, -0.12857975,  0.96217918,  0.04408791),
+        Quat(0.39243229, -0.10727847, -0.59866151, -0.68999466),
+        Quat(0.62851433, -0.23585823,  0.36351768, -0.64590675)
+    ]
 
 
 ##
@@ -62,12 +75,12 @@ def test_calc_beta_oris_calc(ori_single_valid):
     beta_oris = recon.calc_beta_oris(ori_single_valid)
 
     expected_comps = [
-        np.array([0.11460994,  0.97057328,  0.10987647, -0.18105038]),
-        np.array([0.71894262,  0.52597293, -0.12611599,  0.43654181]),
-        np.array([0.48125180,  0.86403135, -0.00937589,  0.14750805]),
-        np.array([0.23608204, -0.12857975,  0.96217918,  0.04408791]),
+        np.array([0.11460994, 0.97057328, 0.10987647, -0.18105038]),
+        np.array([0.71894262, 0.52597293, -0.12611599, 0.43654181]),
+        np.array([0.48125180, 0.86403135, -0.00937589, 0.14750805]),
+        np.array([0.23608204, -0.12857975, 0.96217918, 0.04408791]),
         np.array([0.39243229, -0.10727847, -0.59866151, -0.68999466]),
-        np.array([0.62851433, -0.23585823,  0.36351768, -0.64590675])
+        np.array([0.62851433, -0.23585823, 0.36351768, -0.64590675])
     ]
 
     assert all([np.allclose(quat.quatCoef, row) for quat, row
@@ -137,7 +150,7 @@ def test_beta_oris_from_cub_sym_return_3_ori_return_type(ori_single_valid):
 def test_beta_oris_from_cub_sym_return_3_ori_calc(ori_single_valid):
     expected_comps = [
         np.array([0.58944381, -0.19811007, -0.13576035, -0.77128304]),
-        np.array([0.09026886,  0.01229830, -0.90115179, -0.42382277]),
+        np.array([0.09026886, 0.01229830, -0.90115179, -0.42382277]),
         np.array([0.39243229, -0.10727847, -0.59866151, -0.68999466])
     ]
 
@@ -162,7 +175,7 @@ def test_beta_oris_from_cub_sym_return_2_ori_return_type(ori_single_valid):
 
 def test_beta_oris_from_cub_sym_return_2_ori_calc(ori_single_valid):
     expected_comps = [
-        np.array([0.23608204, -0.12857975,  0.96217918, 0.04408791]),
+        np.array([0.23608204, -0.12857975, 0.96217918, 0.04408791]),
         np.array([0.60433267, -0.44460035, -0.23599247, 0.61759219])
     ]
 
@@ -198,12 +211,13 @@ def test_beta_oris_from_cub_sym_invalid_hex_sym_idx(ori_single_valid):
 ##
 def test_calc_misori_of_variants_return_type(
         ori_single_valid_2, ori_single_valid_3, unq_cub_sym_comps):
-
     rtn_data = recon.calc_misori_of_variants(
         ori_single_valid_2.conjugate, ori_single_valid_3, unq_cub_sym_comps
     )
 
     assert len(rtn_data) == 2
+    assert type(rtn_data[0]) is np.ndarray
+    assert type(rtn_data[1]) is np.ndarray
     assert rtn_data[0].shape == (12, 12)
     assert rtn_data[1].shape == (12, 12)
     # assert rtn_data[0].dtype is float
@@ -212,7 +226,6 @@ def test_calc_misori_of_variants_return_type(
 
 def test_calc_misori_of_variants_calc(
         ori_single_valid_2, ori_single_valid_3, unq_cub_sym_comps):
-
     min_misoris, min_cub_sym_idx = recon.calc_misori_of_variants(
         ori_single_valid_2.conjugate, ori_single_valid_3, unq_cub_sym_comps
     )
@@ -256,22 +269,77 @@ def test_calc_misori_of_variants_calc(
          83.19209904, 60.67666977, 18.90882407, 59.50881108]
     ]) / 180 * np.pi
     expected_sym_idxs = np.array([
-        [1,  7, 3, 6,  8, 10, 6, 5,  0,  4,  7,  11],
-        [3,  2, 8, 1,  3, 11, 7, 4,  10, 5,  9,  10],
-        [2,  3, 1, 8,  6, 5,  8, 10, 9,  11, 11, 4],
-        [7,  8, 6, 2,  7, 4,  3, 11, 6,  10, 0,  5],
-        [8,  1, 3, 10, 8, 10, 9, 9,  3,  4,  7,  11],
-        [7,  1, 6, 2,  7, 10, 2, 11, 5,  6,  1,  5],
-        [11, 8, 2, 3,  9, 9,  3, 11, 6,  10, 8,  5],
-        [1,  7, 2, 6,  1, 10, 6, 11, 2,  4,  4,  7],
-        [2,  6, 1, 7,  2, 2,  4, 4,  1,  1,  6,  10],
-        [6,  2, 7, 8,  6, 5,  0, 0,  7,  11, 3,  4],
-        [6,  2, 7, 1,  5, 5,  1, 1,  7,  11, 2,  2],
-        [3,  6, 1, 7,  0, 0,  7, 4,  8,  5,  6,  10]
+        [1, 7, 3, 6, 8, 10, 6, 5, 0, 4, 7, 11],
+        [3, 2, 8, 1, 3, 11, 7, 4, 10, 5, 9, 10],
+        [2, 3, 1, 8, 6, 5, 8, 10, 9, 11, 11, 4],
+        [7, 8, 6, 2, 7, 4, 3, 11, 6, 10, 0, 5],
+        [8, 1, 3, 10, 8, 10, 9, 9, 3, 4, 7, 11],
+        [7, 1, 6, 2, 7, 10, 2, 11, 5, 6, 1, 5],
+        [11, 8, 2, 3, 9, 9, 3, 11, 6, 10, 8, 5],
+        [1, 7, 2, 6, 1, 10, 6, 11, 2, 4, 4, 7],
+        [2, 6, 1, 7, 2, 2, 4, 4, 1, 1, 6, 10],
+        [6, 2, 7, 8, 6, 5, 0, 0, 7, 11, 3, 4],
+        [6, 2, 7, 1, 5, 5, 1, 1, 7, 11, 2, 2],
+        [3, 6, 1, 7, 0, 0, 7, 4, 8, 5, 6, 10]
     ])
 
     assert np.allclose(min_misoris, expected_misoris)
     assert np.all(min_cub_sym_idx == expected_sym_idxs)
+
+
+##
+# Tests for count_beta_variants
+##
+def test_count_beta_variants_return_type(beta_oris):
+    ori_tol = 5.
+    possible_beta_oris = [
+        [beta_oris[0]]
+    ]
+    variant_count = recon.count_beta_variants(
+        beta_oris, possible_beta_oris, 1, ori_tol
+    )
+
+    assert type(variant_count) is list
+    assert len(variant_count) == 6
+    assert all([type(i) is int for i in variant_count])
+
+
+def test_count_beta_variants_good_count(beta_oris):
+    ori_tol = 5.
+    possible_beta_oris = [
+        [beta_oris[0] * Quat.fromAxisAngle(np.array([1, 0, 0]),
+                                           0.9*ori_tol*np.pi/180)],
+        [beta_oris[1]],
+        [beta_oris[1]],
+        [beta_oris[1], beta_oris[3], beta_oris[4]]
+    ]
+    variant_count = recon.count_beta_variants(
+        beta_oris, possible_beta_oris, 1, ori_tol
+    )
+
+    expected_variant_count = [1, 3, 0, 1, 1, 0]
+
+    assert variant_count == expected_variant_count
+
+
+def test_count_beta_variants_1_bad_ori(beta_oris):
+    ori_tol = 5.
+    possible_beta_oris = [
+        [beta_oris[0] * Quat.fromAxisAngle(np.array([1, 0, 0]),
+                                           1.1*ori_tol*np.pi/180)],
+        [beta_oris[1]],
+        [beta_oris[1]],
+        [beta_oris[1], beta_oris[3], beta_oris[4]]
+    ]
+    with pytest.warns(UserWarning):
+        variant_count = recon.count_beta_variants(
+            beta_oris, possible_beta_oris, 1, ori_tol
+        )
+
+    expected_variant_count = [0, 3, 0, 1, 1, 0]
+
+    assert variant_count == expected_variant_count
+
 
 ##
 # Tests for calc_beta_oris_from_misori
