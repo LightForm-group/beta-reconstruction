@@ -32,4 +32,5 @@ unq_cub_syms = [
 ]
 
 # HCP -> BCC
-burg_trans = Quat(135*np.pi/180, 90*np.pi/180, 354.74*np.pi/180).conjugate
+burg_eulers = np.array([135, 90, 354.74]) * np.pi / 180
+burg_trans = Quat.fromEulerAngles(*burg_eulers).conjugate
