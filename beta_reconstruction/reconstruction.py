@@ -130,9 +130,9 @@ def calc_misori_of_variants(alpha_ori_inv, neighbour_ori, unq_cub_sym_comps):
 
     Returns
     -------
-    min_misoris : np.ndarry
+    min_misoris : np.ndarry shape (12, 12)
 
-    min_cub_sym_idx : np.ndarry
+    min_cub_sym_idx : np.ndarry shape (12, 12)
 
     """
     # calculate all possible S^B_m (eqn 11. from [1]) from the
@@ -229,6 +229,7 @@ def calc_beta_oris_from_misori(alpha_ori, neighbour_oris, burg_tol=5.):
         Deviations from perfect Burgers transformation
 
     """
+    burg_tol *= np.pi / 180.
     # This needed to move further up calculation process
     unq_cub_sym_comps = construct_quat_comps(unq_cub_syms)
 
@@ -252,7 +253,7 @@ def calc_beta_oris_from_misori(alpha_ori, neighbour_oris, burg_tol=5.):
                                           min_misoris.shape)
         burg_dev = min_misoris[min_misori_idx]
 
-        if burg_dev < burg_tol / 180 * np.pi:
+        if burg_dev < burg_tol:
             beta_oris.append(beta_oris_from_cub_sym(
                 alpha_ori, min_cub_sym_idxs[min_misori_idx], min_misori_idx[0]
             ))
@@ -261,7 +262,78 @@ def calc_beta_oris_from_misori(alpha_ori, neighbour_oris, burg_tol=5.):
     return beta_oris, beta_devs
 
 
-def count_beta_variants(beta_oris, possible_beta_oris, grain_id, ori_tol):
+def calc_beta_oris_from_boundary_misori(grain, neighbour_network, quat_array,
+                                        burg_tol=5.):
+    """Calculate the possible beta orientations for pairs of alpha and
+    neighbour orientations using the misorientaion relation to neighbour
+    orientations.
+
+    Parameters
+    ----------
+    grain : list of defdap.Quat.quat
+
+    neighbour_network :
+
+    burg_tol : flaot
+
+    Returns
+    -------
+    beta_oris : list of lists of defdap.Quat.quat
+        Possible beta orientations, grouped by each neighbour. Any
+        neighbour with deviation greater than the tolerance is excluded.
+    beta_devs :  list of float
+        Deviations from perfect Burgers transformation
+
+    """
+    # This needed to move further up calculation process
+    unq_cub_sym_comps = construct_quat_comps(unq_cub_syms)
+
+    beta_oris = []
+    beta_devs = []
+    alpha_oris = []
+
+    neighbour_grains = list(neighbour_network.neighbors(grain))
+    for neighbour_grain in neighbour_grains:
+
+        bseg = neighbour_network[grain][neighbour_grain]['boundary']
+        # check sense of bseg
+        if grain is bseg.grain1:
+            ipoint = 0
+        else:
+            ipoint = 1
+
+        for boundary_point_pair in bseg.boundaryPointPairsX:
+            point = boundary_point_pair[ipoint]
+            alpha_ori = quat_array[point[1], point[0]]
+
+            point = boundary_point_pair[ipoint - 1]
+            neighbour_ori = quat_array[point[1], point[0]]
+
+            min_misoris, min_cub_sym_idxs = calc_misori_of_variants(
+                alpha_ori.conjugate, neighbour_ori, unq_cub_sym_comps
+            )
+
+            # find the hex symmetries (i, j) from give the minimum
+            # deviation from the burgers relation for the minimum store:
+            # the deviation, the hex symmetries (i, j) and the cubic
+            # symmetry if the deviation is over a threshold then set
+            # cubic symmetry to -1
+            min_misori_idx = np.unravel_index(np.argmin(min_misoris),
+                                              min_misoris.shape)
+            burg_dev = min_misoris[min_misori_idx]
+
+            if burg_dev < burg_tol / 180 * np.pi:
+                beta_oris.append(beta_oris_from_cub_sym(
+                    alpha_ori, min_cub_sym_idxs[min_misori_idx], min_misori_idx[0]
+                ))
+                beta_devs.append(burg_dev)
+                alpha_oris.append(alpha_ori)
+
+    return beta_oris, beta_devs, alpha_oris
+
+
+def count_beta_variants(beta_oris, possible_beta_oris, grain_id, ori_tol,
+                        variant_count=None):
     """
 
     Parameters
@@ -291,6 +363,7 @@ def count_beta_variants(beta_oris, possible_beta_oris, grain_id, ori_tol):
             if mis_ori > ori_tol:
                 found = True
                 count_beta_oris[i] += 1
+                break
 
         if not found:
             unique_beta_oris.append(ori)
@@ -306,15 +379,16 @@ def count_beta_variants(beta_oris, possible_beta_oris, grain_id, ori_tol):
                 warnings.warn("Couldn't find beta variant. "
                               "Grain {:}".format(grain_id))
 
-    variant_count = [0, 0, 0, 0, 0, 0]
+    if variant_count is None:
+        variant_count = [0, 0, 0, 0, 0, 0]
     for i in range(len(variant_idxs)):
         if variant_idxs[i] > -1:
-            variant_count[variant_idxs[i]] = count_beta_oris[i]
+            variant_count[variant_idxs[i]] += count_beta_oris[i]
 
     return variant_count
 
 
-def do_reconstruction(ebsd_map, burg_tol=5., ori_tol=3.):
+def do_reconstruction(ebsd_map, mode=1, burg_tol=5., ori_tol=3.):
     """Apply beta reconstruction to a ebsd map object. Nothing is
     returned and output is stored directly in the ebsd map (this should
     probably change)
@@ -323,6 +397,10 @@ def do_reconstruction(ebsd_map, burg_tol=5., ori_tol=3.):
     ----------
     ebsd_map: dedap.ebsd.Map
         EBSD map to apply reconstruction to
+    mode: int
+        How to perform reconstruction
+            'average': grain average orientations
+            'boundary': grain boundary orientations
     burg_tol: float
         Maximum deviation from the Burgers relation to allow (degrees)
     ori_tol: float
@@ -335,18 +413,37 @@ def do_reconstruction(ebsd_map, burg_tol=5., ori_tol=3.):
 
         beta_oris = calc_beta_oris(grain.refOri)
 
-        neighbour_ids = list(ebsd_map.neighbourNetwork.neighbors(grain_id))
-        neighbour_oris = [ebsd_map[i].refOri for i in neighbour_ids]
+        if mode == 'boundary':
+            possible_beta_oris, beta_deviations, alpha_oris = \
+                calc_beta_oris_from_boundary_misori(
+                    grain, ebsd_map.neighbourNetwork, ebsd_map.quatArray,
+                    burg_tol=burg_tol
+                )
 
-        # determine the possible beta orientations based on misorientation
-        # between neighbouring alpha grains
-        possible_beta_oris, beta_deviations = calc_beta_oris_from_misori(
-            grain.refOri, neighbour_oris, burg_tol=burg_tol
-        )
+            variant_count = None
+            for possible_beta_ori, beta_deviation, alpha_ori in zip(
+                    possible_beta_oris, beta_deviations, alpha_oris):
 
-        variant_count = count_beta_variants(
-            beta_oris, possible_beta_oris, grain_id, ori_tol
-        )
+                beta_oris_l = calc_beta_oris(alpha_ori)
+
+                variant_count = count_beta_variants(
+                    beta_oris_l, [possible_beta_ori], grain_id, ori_tol,
+                    variant_count=variant_count
+                )
+
+        else:
+            neighbour_grains = list(ebsd_map.neighbourNetwork.neighbors(grain))
+            neighbour_oris = [grain.refOri for grain in neighbour_grains]
+
+            # determine the possible beta orientations based on misorientation
+            # between neighbouring alpha grains
+            possible_beta_oris, beta_deviations = calc_beta_oris_from_misori(
+                grain.refOri, neighbour_oris, burg_tol=burg_tol
+            )
+
+            variant_count = count_beta_variants(
+                beta_oris, possible_beta_oris, grain_id, ori_tol
+            )
 
         # save results in the grain objects
         grain.betaOris = beta_oris
