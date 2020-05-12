@@ -274,29 +274,33 @@ def calc_beta_oris_from_misori(alpha_ori: Quat, neighbour_oris: List[Quat],
 
         if burg_dev < burg_tol:
             beta_oris.append(beta_oris_from_cub_sym(
-                alpha_ori, min_cub_sym_idxs[min_misori_idx], min_misori_idx[0]
+                alpha_ori, min_cub_sym_idxs[min_misori_idx], int(min_misori_idx[0])
             ))
             beta_devs.append(burg_dev)
 
     return beta_oris, beta_devs
 
 
-def calc_beta_oris_from_boundary_misori(grain: List[Quat], neighbour_network: nx.Graph, quat_array,
-                                        burg_tol: float = 5) -> Union[List[List[Quat]],
-                                                                      List[float]]:
+def calc_beta_oris_from_boundary_misori(grain: ebsd.Grain, neighbour_network: nx.Graph,
+                                        quat_array: np.ndarray, burg_tol: float = 5) -> Tuple[
+      List[List[Quat]], List[float], List[Quat]]:
     """Calculate the possible beta orientations for pairs of alpha and
     neighbour orientations using the misorientation relation to neighbour
     orientations.
 
     Parameters
     ----------
-    grain :
+    grain
+        The grain currently being reconstructed
 
-    neighbour_network :
+    neighbour_network
+        A neighbour network mapping grain boundary connectivity
 
-    quat_array :
+    quat_array
+        Array of quaternions, representing the orientations of the pixels of the EBSD map
 
     burg_tol :
+        The threshold misorientation angle to determine neighbour relations
 
     Returns
     -------
@@ -305,6 +309,8 @@ def calc_beta_oris_from_boundary_misori(grain: List[Quat], neighbour_network: nx
         neighbour with deviation greater than the tolerance is excluded.
     list of float
         Deviations from perfect Burgers transformation
+    list of Quat
+        Alpha orientations
     """
     # This needed to move further up calculation process
     unq_cub_sym_comps = construct_quat_comps(unq_cub_syms)
@@ -345,7 +351,7 @@ def calc_beta_oris_from_boundary_misori(grain: List[Quat], neighbour_network: nx
 
             if burg_dev < burg_tol / 180 * np.pi:
                 beta_oris.append(beta_oris_from_cub_sym(
-                    alpha_ori, min_cub_sym_idxs[min_misori_idx], min_misori_idx[0]
+                    alpha_ori, min_cub_sym_idxs[min_misori_idx], int(min_misori_idx[0])
                 ))
                 beta_devs.append(burg_dev)
                 alpha_oris.append(alpha_ori)
@@ -353,17 +359,22 @@ def calc_beta_oris_from_boundary_misori(grain: List[Quat], neighbour_network: nx
     return beta_oris, beta_devs, alpha_oris
 
 
-def count_beta_variants(beta_oris, possible_beta_oris, grain_id, ori_tol,
-                        variant_count=None):
+def count_beta_variants(beta_oris: List[Quat], possible_beta_oris: list, grain_id: int,
+                        ori_tol: float, variant_count: List[int] = None):
     """
 
     Parameters
     ----------
-    beta_oris: Possible beta orientations from burgers relation - 6 for each orientation
-    possible_beta_oris: Possible beta orientations from misorientations
-    grain_id: Used for debugging
-    ori_tol: Tolerance for binning of the orientiations into the possible 6
-
+    beta_oris
+        Possible beta orientations from burgers relation - 6 for each orientation
+    possible_beta_oris
+        Possible beta orientations from misorientations
+    grain_id
+        Used for debugging
+    ori_tol
+        Tolerance for binning of the orientations into the possible 6
+    variant_count:
+        Previous variant counts to add the new variant count to
     Returns
     -------
 
