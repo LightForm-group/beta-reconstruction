@@ -1,5 +1,6 @@
 numpy
-DefDAP~=0.92
+DefDAP
 setuptools
 networkx
 pytest
+tqdm
