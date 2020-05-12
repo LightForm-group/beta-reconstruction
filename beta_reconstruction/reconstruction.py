@@ -1,6 +1,7 @@
 import numpy as np
 import warnings
-from typing import List, Union, Iterable, Tuple
+from typing import List, Tuple
+import pathlib
 
 import networkx as nx
 from defdap.quat import Quat
@@ -418,6 +419,34 @@ def count_beta_variants(beta_oris: List[Quat], possible_beta_oris: list, grain_i
             variant_count[variant_idxs[i]] += count_beta_oris[i]
 
     return variant_count
+
+
+def load_map(ebsd_path: str, min_grain_size: int = 3, boundary_tolerance: int = 3,
+             use_kuwahara: bool = False, kuwahara_tolerance: int = 5) -> ebsd.Map:
+    """Load in EBSD data and do the required prerequisite computations."""
+
+    ebsd_path = pathlib.Path(ebsd_path)
+    if ebsd_path.suffix == "ctf":
+        map_type = "OxfordText"
+    elif ebsd_path.suffix == "crc":
+        map_type = "OxfordBinary"
+    else:
+        raise TypeError("Unknown ebsd map type. Can only read .ctf and .crc files.")
+
+    ebsd_map = ebsd.Map(ebsd_path.with_suffix(""), "hexagonal", dataType=map_type)
+    ebsd_map.buildQuatArray()
+
+    if use_kuwahara:
+        ebsd_map.filterData(misOriTol=kuwahara_tolerance)
+
+    ebsd_map.findBoundaries(boundDef=boundary_tolerance)
+    ebsd_map.findGrains(minGrainSize=min_grain_size)
+
+    ebsd_map.calcGrainAvOris()
+
+    ebsd_map.buildNeighbourNetwork()
+
+    return ebsd_map
 
 
 def do_reconstruction(ebsd_map: ebsd.Map, mode: int = 1, burg_tol: float = 5, ori_tol: float = 3):
