@@ -34,7 +34,7 @@ def calc_beta_oris(alpha_ori: Quat) -> List[Quat]:
     return beta_oris
 
 
-def construct_quat_comps(oris: Union[List[Quat], Iterable]) -> np.ndarray:
+def construct_quat_comps(oris: List[Quat]) -> np.ndarray:
     """Return a NumPy array of the provided quaternion components
 
     Input quaternions may be given as a list of Quat objects or any iterable
@@ -43,7 +43,7 @@ def construct_quat_comps(oris: Union[List[Quat], Iterable]) -> np.ndarray:
     Parameters
     ----------
     oris
-        Orientations to return the quaternion components of
+        A list of Quat objects to return the components of
 
     Returns
     -------
@@ -78,7 +78,7 @@ def beta_oris_from_cub_sym(alpha_ori: Quat, unq_cub_sym_idx: int, hex_sym_idx: i
     Parameters
     ----------
     alpha_ori
-
+        The orientation of the grain in the alpha phase.
     unq_cub_sym_idx
 
     hex_sym_idx
