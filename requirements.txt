@@ -1,0 +1,5 @@
+numpy
+DefDAP~=0.92
+setuptools
+networkx
+pytest

@@ -2,8 +2,8 @@ import numpy as np
 from defdap.quat import Quat
 
 hex_syms = Quat.symEqv("hexagonal")
-# subset of hexagonal symmetries that give a unique orientaions when the
-# Burgers transofmration is applied
+# subset of hexagonal symmetries that give unique orientations when the
+# Burgers transformation is applied
 unq_hex_syms = [
     hex_syms[0],
     hex_syms[5],
@@ -14,8 +14,8 @@ unq_hex_syms = [
 ]
 
 cubic_syms = Quat.symEqv("cubic")
-# subset of cubic symmetries that give a unique orientaions when the
-# Burgers transofmration is applied
+# subset of cubic symmetries that give unique orientations when the
+# Burgers transformation is applied
 unq_cub_syms = [
     cubic_syms[0],
     cubic_syms[7],
