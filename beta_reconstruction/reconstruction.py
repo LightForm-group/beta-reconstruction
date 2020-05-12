@@ -4,8 +4,9 @@ from typing import List, Tuple
 import pathlib
 
 import networkx as nx
-from defdap.quat import Quat
+from tqdm.auto import tqdm
 from defdap import ebsd
+from defdap.quat import Quat
 
 from beta_reconstruction.crystal_relations import (
     unq_hex_syms, hex_syms, unq_cub_syms, burg_trans
@@ -57,20 +58,6 @@ def construct_quat_comps(oris: List[Quat]) -> np.ndarray:
         quat_comps[:, i] = ori.quatCoef
 
     return quat_comps
-
-
-def report_progress(curr: int, total: int):
-    """Report the progress of the reconstruction process
-
-    Parameters
-    ----------
-    curr
-        Index of current grain
-    total
-        Total number of grains
-    """
-    if curr % int(round(total / 100)) == 0:
-        print("\r Done {:} %".format(int(curr / total * 100)), end="")
 
 
 def beta_oris_from_cub_sym(alpha_ori: Quat, unq_cub_sym_idx: int, hex_sym_idx: int) -> List[Quat]:
@@ -426,12 +413,12 @@ def load_map(ebsd_path: str, min_grain_size: int = 3, boundary_tolerance: int = 
     """Load in EBSD data and do the required prerequisite computations."""
 
     ebsd_path = pathlib.Path(ebsd_path)
-    if ebsd_path.suffix == "ctf":
+    if ebsd_path.suffix == ".ctf":
         map_type = "OxfordText"
-    elif ebsd_path.suffix == "crc":
+    elif ebsd_path.suffix == ".crc":
         map_type = "OxfordBinary"
     else:
-        raise TypeError("Unknown ebsd map type. Can only read .ctf and .crc files.")
+        raise TypeError("Unknown EBSD map type. Can only read .ctf and .crc files.")
 
     ebsd_map = ebsd.Map(ebsd_path.with_suffix(""), "hexagonal", dataType=map_type)
     ebsd_map.buildQuatArray()
@@ -469,9 +456,7 @@ def do_reconstruction(ebsd_map: ebsd.Map, mode: int = 1, burg_tol: float = 5, or
         Maximum deviation from a beta orientation (degrees)
     """
     # this is the only function that interacts with the ebsd map/grain objects
-    num_grains = len(ebsd_map)
-    for grain_id, grain in enumerate(ebsd_map):
-        report_progress(grain_id, num_grains)
+    for grain_id, grain in enumerate(tqdm(ebsd_map)):
 
         beta_oris = calc_beta_oris(grain.refOri)
 
