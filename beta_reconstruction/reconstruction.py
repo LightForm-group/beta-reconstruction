@@ -1,25 +1,29 @@
 import numpy as np
 import warnings
+from typing import List, Union, Iterable, Tuple
 
-# from defdap.quat import Quat
+import networkx as nx
+from defdap.quat import Quat
+from defdap import ebsd
 
 from beta_reconstruction.crystal_relations import (
     unq_hex_syms, hex_syms, unq_cub_syms, burg_trans
 )
 
 
-def calc_beta_oris(alpha_ori):
-    """Calculate the possible beta orientations for a given alpha
-    orientation using the Burgers relation and crystal symmetries.
+def calc_beta_oris(alpha_ori: Quat) -> List[Quat]:
+    """Calculate the possible beta orientations for a given alpha orientation.
+
+    Uses the Burgers relation and crystal symmetries to calculate beta orientations.
 
     Parameters
     ----------
-    alpha_ori : defdap.Quat.quat
+    alpha_ori
         Orientation of an alpha grain
 
     Returns
     -------
-    beta_oris : list of defdap.Quat.quat
+    list of Quat
         List of possible beta orientations
     """
     beta_oris = []
@@ -30,17 +34,20 @@ def calc_beta_oris(alpha_ori):
     return beta_oris
 
 
-def construct_quat_comps(oris):
-    """Construct an array of the quaternion components from input list
+def construct_quat_comps(oris: Union[List[Quat], Iterable]) -> np.ndarray:
+    """Return a NumPy array of the provided quaternion components
+
+    Input quaternions may be given as a list of Quat objects or any iterable
+    whose items have 4 components which map to the quaternion.
 
     Parameters
     ----------
-    oris : list of defdap.Quat.quat (or other 1D enumerable type)
+    oris
         Orientations to return the quaternion components of
 
     Returns
     -------
-    quat_comps : np.ndarray
+    np.ndarray
         Array of quaternion components, shape (4, n)
 
     """
@@ -51,32 +58,35 @@ def construct_quat_comps(oris):
     return quat_comps
 
 
-def report_progress(curr, total):
+def report_progress(curr: int, total: int):
     """Report the progress of the reconstruction process
 
     Parameters
     ----------
-    curr : int
+    curr
         Index of current grain
-    total : int
+    total
         Total number of grains
     """
     if curr % int(round(total / 100)) == 0:
         print("\r Done {:} %".format(int(curr / total * 100)), end="")
 
 
-def beta_oris_from_cub_sym(alpha_ori, unq_cub_sym_idx, hex_sym_idx):
+def beta_oris_from_cub_sym(alpha_ori: Quat, unq_cub_sym_idx: int, hex_sym_idx: int) -> List[Quat]:
     """
 
     Parameters
     ----------
-    alpha_ori : defdap.quat.Quat
-    unq_cub_sym_idx : int
-    hex_sym_idx : int
+    alpha_ori
+
+    unq_cub_sym_idx
+
+    hex_sym_idx
+
 
     Returns
     -------
-    beta_oris : list of defdap.Quat.quat
+    list of Quat
         Possible beta orientations from given symmetries
 
     """
@@ -113,26 +123,31 @@ def beta_oris_from_cub_sym(alpha_ori, unq_cub_sym_idx, hex_sym_idx):
     return beta_oris
 
 
-def calc_misori_of_variants(alpha_ori_inv, neighbour_ori, unq_cub_sym_comps):
-    """Calculate all possible sym variants for disorientaion between two
-    orientaions undergoing a Burgers type transformation. Then calculate
-    the misorioritation to the nearest cubic symmetry, this is the deviation
+def calc_misori_of_variants(alpha_ori_inv: Quat, neighbour_ori: Quat,
+                            unq_cub_sym_comps: np.ndarray) -> Tuple[np.ndarray, np.ndarray]:
+    """Calculate possible symmetry variants between two orientations.
+
+    Calculate all possible sym variants for misorientation between two
+    orientations undergoing a Burgers type transformation. Then calculate
+    the misorientation to the nearest cubic symmetry, this is the deviation
     to a perfect Burgers transformation.
 
     Parameters
     ----------
-    alpha_ori_inv : defdap.Quat.quat
+    alpha_ori_inv
         Inverse of first orientation
-    neighbour_ori : defdap.Quat.quat
+    neighbour_ori
         Second orientation
-    unq_cub_sym_comps: np.ndaray
+    unq_cub_sym_comps
         Components of the unique cubic symmetries
 
     Returns
     -------
-    min_misoris : np.ndarry shape (12, 12)
+    min_misoris : np.ndarray 
+       The minimum misorientation for each of the possible beta variants - shape (12, 12)
 
-    min_cub_sym_idx : np.ndarry shape (12, 12)
+    min_cub_sym_idx : np.ndarray
+       The minimum cubic symmetry index for each of the possible variants - shape (12, 12)
 
     """
     # calculate all possible S^B_m (eqn 11. from [1]) from the
@@ -208,24 +223,28 @@ def calc_misori_of_variants(alpha_ori_inv, neighbour_ori, unq_cub_sym_comps):
     return min_misoris, min_cub_sym_idx
 
 
-def calc_beta_oris_from_misori(alpha_ori, neighbour_oris, burg_tol=5.):
+def calc_beta_oris_from_misori(alpha_ori: Quat, neighbour_oris: List[Quat],
+                               burg_tol: float = 5) -> Tuple[List[List[Quat]], List[float]]:
     """Calculate the possible beta orientations for a given alpha
-    orientation using the misorientaion relation to neighbour orientations.
+    orientation using the misorientation relation to neighbour orientations.
 
     Parameters
     ----------
-    alpha_ori : defdap.Quat.quat
+    alpha_ori
+        A quaternion representing the alpha orientation
 
-    neighbour_oris : list of defdap.Quat.quat
+    neighbour_oris
+        Quaternions representing neighbour grain orientations
 
-    burg_tol : flaot
+    burg_tol
+        The threshold misorientation angle to determine neighbour relations
 
     Returns
     -------
-    beta_oris : list of lists of defdap.Quat.quat
+    list of lists of defdap.Quat.quat
         Possible beta orientations, grouped by each neighbour. Any
         neighbour with deviation greater than the tolerance is excluded.
-    beta_devs :  list of float
+    list of float
         Deviations from perfect Burgers transformation
 
     """
@@ -262,28 +281,30 @@ def calc_beta_oris_from_misori(alpha_ori, neighbour_oris, burg_tol=5.):
     return beta_oris, beta_devs
 
 
-def calc_beta_oris_from_boundary_misori(grain, neighbour_network, quat_array,
-                                        burg_tol=5.):
+def calc_beta_oris_from_boundary_misori(grain: List[Quat], neighbour_network: nx.Graph, quat_array,
+                                        burg_tol: float = 5) -> Union[List[List[Quat]],
+                                                                      List[float]]:
     """Calculate the possible beta orientations for pairs of alpha and
-    neighbour orientations using the misorientaion relation to neighbour
+    neighbour orientations using the misorientation relation to neighbour
     orientations.
 
     Parameters
     ----------
-    grain : list of defdap.Quat.quat
+    grain :
 
     neighbour_network :
 
-    burg_tol : flaot
+    quat_array :
+
+    burg_tol :
 
     Returns
     -------
-    beta_oris : list of lists of defdap.Quat.quat
+    list of lists of defdap.Quat.quat
         Possible beta orientations, grouped by each neighbour. Any
         neighbour with deviation greater than the tolerance is excluded.
-    beta_devs :  list of float
+    list of float
         Deviations from perfect Burgers transformation
-
     """
     # This needed to move further up calculation process
     unq_cub_sym_comps = construct_quat_comps(unq_cub_syms)
@@ -338,10 +359,10 @@ def count_beta_variants(beta_oris, possible_beta_oris, grain_id, ori_tol,
 
     Parameters
     ----------
-    beta_oris
-    possible_beta_oris
-    grain_id
-    ori_tol
+    beta_oris: Possible beta orientations from burgers relation - 6 for each orientation
+    possible_beta_oris: Possible beta orientations from misorientations
+    grain_id: Used for debugging
+    ori_tol: Tolerance for binning of the orientiations into the possible 6
 
     Returns
     -------
@@ -388,23 +409,24 @@ def count_beta_variants(beta_oris, possible_beta_oris, grain_id, ori_tol,
     return variant_count
 
 
-def do_reconstruction(ebsd_map, mode=1, burg_tol=5., ori_tol=3.):
-    """Apply beta reconstruction to a ebsd map object. Nothing is
-    returned and output is stored directly in the ebsd map (this should
+def do_reconstruction(ebsd_map: ebsd.Map, mode: int = 1, burg_tol: float = 5, ori_tol: float = 3):
+    """Apply beta reconstruction to a ebsd map object.
+
+    The reconstructed beta map is stored directly in the ebsd map (this should
     probably change)
 
     Parameters
     ----------
-    ebsd_map: dedap.ebsd.Map
+    ebsd_map:
         EBSD map to apply reconstruction to
-    mode: int
+    mode
         How to perform reconstruction
             'average': grain average orientations
             'boundary': grain boundary orientations
-    burg_tol: float
+    burg_tol
         Maximum deviation from the Burgers relation to allow (degrees)
     ori_tol: float
-        Maximum deviation from a beta orientaion (degrees)
+        Maximum deviation from a beta orientation (degrees)
     """
     # this is the only function that interacts with the ebsd map/grain objects
     num_grains = len(ebsd_map)
