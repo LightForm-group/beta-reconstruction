@@ -285,16 +285,13 @@ class TestCountBetaVariants:
     @staticmethod
     def test_return_type(beta_oris: List[Quat]):
         ori_tol = 5.
-        possible_beta_oris = [
-            [beta_oris[0]]
-        ]
-        variant_count = recon.count_beta_variants(
-            beta_oris, possible_beta_oris, 1, ori_tol
-        )
+        possible_beta_oris = [[beta_oris[0]]]
+        variant_count = recon.count_beta_variants(beta_oris, possible_beta_oris,
+                                                  1, ori_tol)
 
-        assert type(variant_count) is list
+        assert type(variant_count) is np.ndarray
         assert len(variant_count) == 6
-        assert all([type(i) is int for i in variant_count])
+        assert variant_count.dtype == int
 
     @staticmethod
     def test_good_count(beta_oris: List[Quat]):
@@ -312,7 +309,7 @@ class TestCountBetaVariants:
 
         expected_variant_count = [1, 3, 0, 1, 1, 0]
 
-        assert variant_count == expected_variant_count
+        assert all(np.equal(variant_count, expected_variant_count))
 
     @staticmethod
     def test_1_bad_ori(beta_oris: List[Quat]):
@@ -331,4 +328,4 @@ class TestCountBetaVariants:
 
         expected_variant_count = [0, 3, 0, 1, 1, 0]
 
-        assert variant_count == expected_variant_count
+        assert all(np.equal(variant_count, expected_variant_count))

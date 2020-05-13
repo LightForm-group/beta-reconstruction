@@ -348,7 +348,7 @@ def calc_beta_oris_from_boundary_misori(grain: ebsd.Grain, neighbour_network: nx
 
 
 def count_beta_variants(beta_oris: List[Quat], possible_beta_oris: list, grain_id: int,
-                        ori_tol: float, variant_count: List[int] = None) -> List[int]:
+                        ori_tol: float) -> np.ndarray:
     """
 
     Parameters
@@ -361,8 +361,6 @@ def count_beta_variants(beta_oris: List[Quat], possible_beta_oris: list, grain_i
         Used for debugging
     ori_tol
         Tolerance for binning of the orientations into the possible 6
-    variant_count:
-        Previous variant counts to add the new variant count to
     Returns
     -------
     list of int:
@@ -402,8 +400,7 @@ def count_beta_variants(beta_oris: List[Quat], possible_beta_oris: list, grain_i
                 warnings.warn("Couldn't find beta variant. "
                               "Grain {:}".format(grain_id))
 
-    if variant_count is None:
-        variant_count = [0, 0, 0, 0, 0, 0]
+    variant_count = np.zeros(6, dtype=int)
     for i in range(len(variant_idxs)):
         if variant_idxs[i] > -1:
             variant_count[variant_idxs[i]] += count_beta_oris[i]
@@ -509,6 +506,7 @@ def do_reconstruction(ebsd_map: ebsd.Map, mode: int = 1, burg_tol: float = 5, or
     for grain_id, grain in enumerate(tqdm(ebsd_map)):
 
         beta_oris = calc_beta_oris(grain.refOri)
+        variant_count = np.zeros(6, dtype=int)
 
         if mode == 'boundary':
             possible_beta_oris, beta_deviations, alpha_oris = \
@@ -517,16 +515,14 @@ def do_reconstruction(ebsd_map: ebsd.Map, mode: int = 1, burg_tol: float = 5, or
                     burg_tol=burg_tol
                 )
 
-            variant_count = None
             for possible_beta_ori, beta_deviation, alpha_ori in zip(
                     possible_beta_oris, beta_deviations, alpha_oris):
 
                 beta_oris_l = calc_beta_oris(alpha_ori)
 
-                variant_count = count_beta_variants(
-                    beta_oris_l, [possible_beta_ori], grain_id, ori_tol,
-                    variant_count=variant_count
-                )
+                variant_count += count_beta_variants(beta_oris_l,
+                                                     [possible_beta_ori],
+                                                     grain_id, ori_tol)
 
         else:
             neighbour_grains = list(ebsd_map.neighbourNetwork.neighbors(grain))
@@ -538,7 +534,7 @@ def do_reconstruction(ebsd_map: ebsd.Map, mode: int = 1, burg_tol: float = 5, or
                 grain.refOri, neighbour_oris, burg_tol=burg_tol
             )
 
-            variant_count = count_beta_variants(
+            variant_count += count_beta_variants(
                 beta_oris, possible_beta_oris, grain_id, ori_tol
             )
 
