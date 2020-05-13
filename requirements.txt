@@ -4,3 +4,4 @@ setuptools
 networkx
 pytest
 tqdm
+pyqt5

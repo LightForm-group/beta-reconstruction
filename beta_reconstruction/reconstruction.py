@@ -348,7 +348,7 @@ def calc_beta_oris_from_boundary_misori(grain: ebsd.Grain, neighbour_network: nx
 
 
 def count_beta_variants(beta_oris: List[Quat], possible_beta_oris: list, grain_id: int,
-                        ori_tol: float, variant_count: List[int] = None):
+                        ori_tol: float, variant_count: List[int] = None) -> List[int]:
     """
 
     Parameters
@@ -365,6 +365,9 @@ def count_beta_variants(beta_oris: List[Quat], possible_beta_oris: list, grain_i
         Previous variant counts to add the new variant count to
     Returns
     -------
+    list of int:
+        The newly updated variant count
+
 
     """
     # do all the accounting stuff
@@ -433,6 +436,53 @@ def load_map(ebsd_path: str, min_grain_size: int = 3, boundary_tolerance: int = 
 
     ebsd_map.buildNeighbourNetwork()
 
+    return ebsd_map
+
+
+def assign_modal_variant(ebsd_map: ebsd.Map) -> ebsd.Map:
+    """Given a map of grains with variant counts, assign the prior beta orientation of the
+    grains to the variant with the highest count."""
+
+    for grain in ebsd_map:
+        variantCount = np.array(grain.variantCount)
+        modeVariant = np.where(variantCount == np.max(variantCount))[0]
+        if len(modeVariant) == 1:
+            modeVariant = modeVariant[0]
+            parentBetaOri = grain.betaOris[modeVariant]
+        else:
+            #  multiple variants with same max
+            modeVariant = -1
+            parentBetaOri = Quat(1., 0., 0., 0.)
+
+        grain.modeVariant = modeVariant
+        grain.parentBetaOri = parentBetaOri
+
+    return ebsd_map
+
+
+def assign_beta_variants(ebsd_map: ebsd.Map,  mode: str = "modal"):
+    """Given a map of grains with variant counts, determine the prior beta orientation of the
+    grains.
+
+    Parameters
+    ----------
+    ebsd_map:
+        EBSD map to assign the beta variants for.
+    mode
+        How to perform beta orientation assignment
+            'modal': The beta orientation is assigned to the variant with the highest count.
+
+    Returns
+    --------
+    ebsd.Map
+        An ebsd map with the beta orientations assigned to grains.
+    """
+
+    if mode == "modal":
+        ebsd_map = assign_modal_variant(ebsd_map)
+    else:
+        raise NotImplementedError(f"Mode '{mode}' is not a recognised way to assign variants.")
+    print("Assignment of beta variants complete.")
     return ebsd_map
 
 
