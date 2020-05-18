@@ -1,8 +1,8 @@
-import numpy as np
 import warnings
 from typing import List, Tuple
 import pathlib
 
+import numpy as np
 import networkx as nx
 from tqdm.auto import tqdm
 from defdap import ebsd
@@ -347,7 +347,7 @@ def calc_beta_oris_from_boundary_misori(grain: ebsd.Grain, neighbour_network: nx
     return beta_oris, beta_devs, alpha_oris
 
 
-def count_beta_variants(beta_oris: List[Quat], possible_beta_oris: list, grain_id: int,
+def count_beta_variants(beta_oris: List[Quat], possible_beta_oris: List[Quat], grain_id: int,
                         ori_tol: float) -> np.ndarray:
     """
 
@@ -356,7 +356,7 @@ def count_beta_variants(beta_oris: List[Quat], possible_beta_oris: list, grain_i
     beta_oris
         Possible beta orientations from burgers relation - 6 for each orientation
     possible_beta_oris
-        Possible beta orientations from misorientations
+        Possible beta orientations from misorientations between neighbouring grains
     grain_id
         Used for debugging
     ori_tol
@@ -372,21 +372,19 @@ def count_beta_variants(beta_oris: List[Quat], possible_beta_oris: list, grain_i
     # divide 2 because of 2* in misorientation definition
     ori_tol = np.cos(ori_tol / 2 * np.pi / 180.)
     # flatten list of lists
-    possible_beta_oris = [item for sublist in possible_beta_oris
-                          for item in sublist]
+    possible_beta_oris = [item for sublist in possible_beta_oris for item in sublist]
     unique_beta_oris = []
     count_beta_oris = []
     variant_idxs = []
-    for ori in possible_beta_oris:
-        found = False
-        for i, uniqueOri in enumerate(unique_beta_oris):
-            mis_ori = ori.misOri(uniqueOri, "cubic")
-            if mis_ori > ori_tol:
-                found = True
-                count_beta_oris[i] += 1
-                break
 
-        if not found:
+    # Loop through beta orientations discovered from neighbour misorientations
+    for ori in possible_beta_oris:
+
+        orientation_index = quat_index_where(ori, unique_beta_oris, ori_tol)
+        if orientation_index > -1:
+            count_beta_oris[orientation_index] += 1
+
+        else:
             unique_beta_oris.append(ori)
             count_beta_oris.append(1)
 
@@ -406,6 +404,31 @@ def count_beta_variants(beta_oris: List[Quat], possible_beta_oris: list, grain_i
             variant_count[variant_idxs[i]] += count_beta_oris[i]
 
     return variant_count
+
+
+def quat_index_where(quat: Quat, quat_list: List[Quat], ori_tol: float) -> int:
+    """Return the index of the first quaternion in ``quat_list`` with a misorientation to ``quat``
+    less than ``ori_tol``.
+
+    Parameters
+    ----------
+    quat:
+        The quaternion to find.
+    quat_list:
+        The list of Quaternions to find ``quat`` in.
+    ori_tol:
+        The misorientation tolerance between quaternions to determine the match.
+
+    Returns
+    --------
+    int
+        The index of the matching quaternion in ``quat_list`` if a match is found, else -1.
+    """
+    for i, other_quat in enumerate(quat_list):
+        mis_ori = quat.misOri(other_quat, "cubic")
+        if mis_ori > ori_tol:
+            return i
+    return -1
 
 
 def load_map(ebsd_path: str, min_grain_size: int = 3, boundary_tolerance: int = 3,
