@@ -354,7 +354,7 @@ def count_beta_variants(beta_oris: List[Quat], possible_beta_oris: List[Quat], g
     Parameters
     ----------
     beta_oris
-        Possible beta orientations from burgers relation - 6 for each orientation
+        Possible beta orientations from burgers relation, there are always 6
     possible_beta_oris
         Possible beta orientations from misorientations between neighbouring grains
     grain_id
@@ -380,23 +380,20 @@ def count_beta_variants(beta_oris: List[Quat], possible_beta_oris: List[Quat], g
     # Loop through beta orientations discovered from neighbour misorientations
     for ori in possible_beta_oris:
 
+        # Try and find the orientation in the list of already found orientations
         orientation_index = quat_index_where(ori, unique_beta_oris, ori_tol)
         if orientation_index > -1:
             count_beta_oris[orientation_index] += 1
 
+        # If the orientation is not found add it to the list of found orientations.
         else:
             unique_beta_oris.append(ori)
             count_beta_oris.append(1)
-
-            for i, betaVariant in enumerate(beta_oris):
-                mis_ori = ori.misOri(betaVariant, "cubic")
-                if mis_ori > ori_tol:
-                    variant_idxs.append(i)
-                    break
-            else:
-                variant_idxs.append(-1)
-                warnings.warn("Couldn't find beta variant. "
-                              "Grain {:}".format(grain_id))
+            # Now loop through the 6 possible orientations seeing which it is closest to
+            orientation_index = quat_index_where(ori, beta_oris, ori_tol)
+            variant_idxs.append(orientation_index)
+            if orientation_index == -1:
+                warnings.warn(f"Could not find beta variant. Grain {grain_id}")
 
     variant_count = np.zeros(6, dtype=int)
     for i in range(len(variant_idxs)):
