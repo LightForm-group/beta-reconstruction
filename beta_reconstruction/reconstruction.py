@@ -347,7 +347,7 @@ def calc_beta_oris_from_boundary_misori(grain: ebsd.Grain, neighbour_network: nx
     return beta_oris, beta_devs, alpha_oris
 
 
-def count_beta_variants(beta_oris: List[Quat], possible_beta_oris: List[Quat], grain_id: int,
+def count_beta_variants(beta_oris: List[Quat], possible_beta_oris: List[List[Quat]],
                         ori_tol: float) -> np.ndarray:
     """
 
@@ -357,75 +357,30 @@ def count_beta_variants(beta_oris: List[Quat], possible_beta_oris: List[Quat], g
         Possible beta orientations from burgers relation, there are always 6
     possible_beta_oris
         Possible beta orientations from misorientations between neighbouring grains
-    grain_id
-        Used for debugging
     ori_tol
         Tolerance for binning of the orientations into the possible 6
     Returns
     -------
     list of int:
-        The newly updated variant count
+        The variant count for the grain
 
 
     """
-    # do all the accounting stuff
+    if not possible_beta_oris:
+        return np.zeros(6, dtype=int)
     # divide 2 because of 2* in misorientation definition
     ori_tol = np.cos(ori_tol / 2 * np.pi / 180.)
     # flatten list of lists
     possible_beta_oris = [item for sublist in possible_beta_oris for item in sublist]
-    unique_beta_oris = []
-    count_beta_oris = []
 
-    # Loop through beta orientations discovered from neighbour misorientations
-    for ori in possible_beta_oris:
+    misorientations = np.empty((len(possible_beta_oris), 6))
+    for ori_index, ori in enumerate(possible_beta_oris):
+        for other_ori_index, other_ori in enumerate(beta_oris):
+            misorientations[ori_index, other_ori_index] = ori.misOri(other_ori, "cubic")
 
-        # Try and find the orientation in the list of already found orientations
-        orientation_index = quat_index_where(ori, unique_beta_oris, ori_tol)
-        if orientation_index > -1:
-            count_beta_oris[orientation_index] += 1
-
-        # If the orientation is not found add it to the list of found orientations.
-        else:
-            unique_beta_oris.append(ori)
-            count_beta_oris.append(1)
-
-    # Once all neighbours have been assigned, work out which of the 6 possible orientations
-    # each unique orientation corresponds to
-    variant_count = np.zeros(6, dtype=int)
-
-    for index, ori in enumerate(unique_beta_oris):
-        orientation_index = quat_index_where(ori, beta_oris, ori_tol)
-        if orientation_index == -1:
-            warnings.warn(f"Could not find beta variant. Grain {grain_id}")
-        else:
-            variant_count[orientation_index] += count_beta_oris[index]
-
+    max_misoris = np.nanargmax(misorientations, axis=1)
+    variant_count, _ = np.histogram(max_misoris, range(0, 7))
     return variant_count
-
-
-def quat_index_where(quat: Quat, quat_list: List[Quat], ori_tol: float) -> int:
-    """Return the index of the first quaternion in ``quat_list`` with a misorientation to ``quat``
-    less than ``ori_tol``.
-
-    Parameters
-    ----------
-    quat:
-        The quaternion to find.
-    quat_list:
-        The list of Quaternions to find ``quat`` in.
-    ori_tol:
-        The misorientation tolerance between quaternions to determine the match.
-
-    Returns
-    --------
-    int
-        The index of the matching quaternion in ``quat_list`` if a match is found, else -1.
-    """
-    for i, other_quat in enumerate(quat_list):
-        mis_ori = quat.misOri(other_quat, "cubic")
-        if mis_ori > ori_tol:
-            return i
-    return -1
 
 
 def load_map(ebsd_path: str, min_grain_size: int = 3, boundary_tolerance: int = 3,
@@ -540,9 +495,7 @@ def do_reconstruction(ebsd_map: ebsd.Map, mode: int = 1, burg_tol: float = 5, or
 
                 beta_oris_l = calc_beta_oris(alpha_ori)
 
-                variant_count += count_beta_variants(beta_oris_l,
-                                                     [possible_beta_ori],
-                                                     grain_id, ori_tol)
+                variant_count += count_beta_variants(beta_oris_l, [possible_beta_ori], ori_tol)
 
         else:
             neighbour_grains = list(ebsd_map.neighbourNetwork.neighbors(grain))
@@ -554,9 +507,7 @@ def do_reconstruction(ebsd_map: ebsd.Map, mode: int = 1, burg_tol: float = 5, or
                 grain.refOri, neighbour_oris, burg_tol=burg_tol
             )
 
-            variant_count += count_beta_variants(
-                beta_oris, possible_beta_oris, grain_id, ori_tol
-            )
+            variant_count += count_beta_variants(beta_oris, possible_beta_oris, ori_tol)
 
         # save results in the grain objects
         grain.betaOris = beta_oris
