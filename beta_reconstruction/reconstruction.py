@@ -1,8 +1,8 @@
-import numpy as np
 import warnings
 from typing import List, Tuple
 import pathlib
 
+import numpy as np
 import networkx as nx
 from tqdm.auto import tqdm
 from defdap import ebsd
@@ -347,64 +347,39 @@ def calc_beta_oris_from_boundary_misori(grain: ebsd.Grain, neighbour_network: nx
     return beta_oris, beta_devs, alpha_oris
 
 
-def count_beta_variants(beta_oris: List[Quat], possible_beta_oris: list, grain_id: int,
+def count_beta_variants(beta_oris: List[Quat], possible_beta_oris: List[List[Quat]],
                         ori_tol: float) -> np.ndarray:
     """
 
     Parameters
     ----------
     beta_oris
-        Possible beta orientations from burgers relation - 6 for each orientation
+        Possible beta orientations from burgers relation, there are always 6
     possible_beta_oris
-        Possible beta orientations from misorientations
-    grain_id
-        Used for debugging
+        Possible beta orientations from misorientations between neighbouring grains
     ori_tol
         Tolerance for binning of the orientations into the possible 6
     Returns
     -------
     list of int:
-        The newly updated variant count
+        The variant count for the grain
 
 
     """
-    # do all the accounting stuff
+    if not possible_beta_oris:
+        return np.zeros(6, dtype=int)
     # divide 2 because of 2* in misorientation definition
     ori_tol = np.cos(ori_tol / 2 * np.pi / 180.)
     # flatten list of lists
-    possible_beta_oris = [item for sublist in possible_beta_oris
-                          for item in sublist]
-    unique_beta_oris = []
-    count_beta_oris = []
-    variant_idxs = []
-    for ori in possible_beta_oris:
-        found = False
-        for i, uniqueOri in enumerate(unique_beta_oris):
-            mis_ori = ori.misOri(uniqueOri, "cubic")
-            if mis_ori > ori_tol:
-                found = True
-                count_beta_oris[i] += 1
-                break
+    possible_beta_oris = [item for sublist in possible_beta_oris for item in sublist]
 
-        if not found:
-            unique_beta_oris.append(ori)
-            count_beta_oris.append(1)
+    misorientations = np.empty((len(possible_beta_oris), 6))
+    for ori_index, ori in enumerate(possible_beta_oris):
+        for other_ori_index, other_ori in enumerate(beta_oris):
+            misorientations[ori_index, other_ori_index] = ori.misOri(other_ori, "cubic")
 
-            for i, betaVariant in enumerate(beta_oris):
-                mis_ori = ori.misOri(betaVariant, "cubic")
-                if mis_ori > ori_tol:
-                    variant_idxs.append(i)
-                    break
-            else:
-                variant_idxs.append(-1)
-                warnings.warn("Couldn't find beta variant. "
-                              "Grain {:}".format(grain_id))
-
-    variant_count = np.zeros(6, dtype=int)
-    for i in range(len(variant_idxs)):
-        if variant_idxs[i] > -1:
-            variant_count[variant_idxs[i]] += count_beta_oris[i]
-
+    max_misoris = np.nanargmax(misorientations, axis=1)
+    variant_count, _ = np.histogram(max_misoris, range(0, 7))
     return variant_count
 
 
@@ -520,9 +495,7 @@ def do_reconstruction(ebsd_map: ebsd.Map, mode: int = 1, burg_tol: float = 5, or
 
                 beta_oris_l = calc_beta_oris(alpha_ori)
 
-                variant_count += count_beta_variants(beta_oris_l,
-                                                     [possible_beta_ori],
-                                                     grain_id, ori_tol)
+                variant_count += count_beta_variants(beta_oris_l, [possible_beta_ori], ori_tol)
 
         else:
             neighbour_grains = list(ebsd_map.neighbourNetwork.neighbors(grain))
@@ -534,9 +507,7 @@ def do_reconstruction(ebsd_map: ebsd.Map, mode: int = 1, burg_tol: float = 5, or
                 grain.refOri, neighbour_oris, burg_tol=burg_tol
             )
 
-            variant_count += count_beta_variants(
-                beta_oris, possible_beta_oris, grain_id, ori_tol
-            )
+            variant_count += count_beta_variants(beta_oris, possible_beta_oris, ori_tol)
 
         # save results in the grain objects
         grain.betaOris = beta_oris
