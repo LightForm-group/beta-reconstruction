@@ -435,7 +435,7 @@ def load_map(
 def assign_modal_variant(
     ebsd_map: ebsd.Map,
     alpha_phase_id: int = 0
-) -> ebsd.Map:
+):
     """Given a map of grains with variant counts, assign the prior beta
     orientation of the grains to the variant with the highest count.
 
@@ -463,16 +463,14 @@ def assign_modal_variant(
         grain.modeVariant = mode_variant
         grain.parentBetaOri = parent_beta_ori
 
-    return ebsd_map
-
 
 def assign_beta_variants(
     ebsd_map: ebsd.Map,
     mode: str = "modal",
     alpha_phase_id: int = 0
 ):
-    """Given a map of grains with variant counts, determine the prior beta orientation of the
-    grains.
+    """Given a map of grains with variant counts, determine the prior
+    beta orientation of the grains.
 
     Parameters
     ----------
@@ -480,22 +478,18 @@ def assign_beta_variants(
         EBSD map to assign the beta variants for.
     mode
         How to perform beta orientation assignment
-            'modal': The beta orientation is assigned to the variant with the highest count.
+            'modal': The beta orientation is assigned to the variant
+                     with the highest count.
     alpha_phase_id
         Index of the alpha phase in the EBSD map.
 
-    Returns
-    --------
-    ebsd.Map
-        An ebsd map with the beta orientations assigned to grains.
-
     """
     if mode == "modal":
-        ebsd_map = assign_modal_variant(ebsd_map, alpha_phase_id=alpha_phase_id)
+        assign_modal_variant(ebsd_map, alpha_phase_id=alpha_phase_id)
     else:
-        raise NotImplementedError(f"Mode '{mode}' is not a recognised way to assign variants.")
+        raise NotImplementedError(f"Mode '{mode}' is not a recognised "
+                                  f"way to assign variants.")
     print("Assignment of beta variants complete.")
-    return ebsd_map
 
 
 def do_reconstruction(
@@ -507,8 +501,8 @@ def do_reconstruction(
 ):
     """Apply beta reconstruction to a ebsd map object.
 
-    The reconstructed beta map is stored directly in the ebsd map (this should
-    probably change)
+    The reconstructed beta map is stored directly in the ebsd map (this
+    should probably change)
 
     Parameters
     ----------
