@@ -60,7 +60,11 @@ def construct_quat_comps(oris: List[Quat]) -> np.ndarray:
     return quat_comps
 
 
-def beta_oris_from_cub_sym(alpha_ori: Quat, unq_cub_sym_idx: int, hex_sym_idx: int) -> List[Quat]:
+def beta_oris_from_cub_sym(
+    alpha_ori: Quat,
+    unq_cub_sym_idx: int,
+    hex_sym_idx: int
+) -> List[Quat]:
     """
 
     Parameters
@@ -111,8 +115,11 @@ def beta_oris_from_cub_sym(alpha_ori: Quat, unq_cub_sym_idx: int, hex_sym_idx: i
     return beta_oris
 
 
-def calc_misori_of_variants(alpha_ori_inv: Quat, neighbour_ori: Quat,
-                            unq_cub_sym_comps: np.ndarray) -> Tuple[np.ndarray, np.ndarray]:
+def calc_misori_of_variants(
+    alpha_ori_inv: Quat,
+    neighbour_ori: Quat,
+    unq_cub_sym_comps: np.ndarray
+) -> Tuple[np.ndarray, np.ndarray]:
     """Calculate possible symmetry variants between two orientations.
 
     Calculate all possible sym variants for misorientation between two
@@ -211,8 +218,11 @@ def calc_misori_of_variants(alpha_ori_inv: Quat, neighbour_ori: Quat,
     return min_misoris, min_cub_sym_idx
 
 
-def calc_beta_oris_from_misori(alpha_ori: Quat, neighbour_oris: List[Quat],
-                               burg_tol: float = 5) -> Tuple[List[List[Quat]], List[float]]:
+def calc_beta_oris_from_misori(
+    alpha_ori: Quat,
+    neighbour_oris: List[Quat],
+    burg_tol: float = 5
+) -> Tuple[List[List[Quat]], List[float]]:
     """Calculate the possible beta orientations for a given alpha
     orientation using the misorientation relation to neighbour orientations.
 
@@ -269,9 +279,12 @@ def calc_beta_oris_from_misori(alpha_ori: Quat, neighbour_oris: List[Quat],
     return beta_oris, beta_devs
 
 
-def calc_beta_oris_from_boundary_misori(grain: ebsd.Grain, neighbour_network: nx.Graph,
-                                        quat_array: np.ndarray, burg_tol: float = 5) -> Tuple[
-      List[List[Quat]], List[float], List[Quat]]:
+def calc_beta_oris_from_boundary_misori(
+    grain: ebsd.Grain,
+    neighbour_network: nx.Graph,
+    quat_array: np.ndarray,
+    burg_tol: float = 5
+) -> Tuple[List[List[Quat]], List[float], List[Quat]]:
     """Calculate the possible beta orientations for pairs of alpha and
     neighbour orientations using the misorientation relation to neighbour
     orientations.
@@ -299,6 +312,7 @@ def calc_beta_oris_from_boundary_misori(grain: ebsd.Grain, neighbour_network: nx
         Deviations from perfect Burgers transformation
     list of Quat
         Alpha orientations
+
     """
     # This needed to move further up calculation process
     unq_cub_sym_comps = construct_quat_comps(unq_cub_syms)
@@ -347,8 +361,11 @@ def calc_beta_oris_from_boundary_misori(grain: ebsd.Grain, neighbour_network: nx
     return beta_oris, beta_devs, alpha_oris
 
 
-def count_beta_variants(beta_oris: List[Quat], possible_beta_oris: List[List[Quat]],
-                        ori_tol: float) -> np.ndarray:
+def count_beta_variants(
+    beta_oris: List[Quat],
+    possible_beta_oris: List[List[Quat]],
+    ori_tol: float
+) -> np.ndarray:
     """
 
     Parameters
@@ -363,7 +380,6 @@ def count_beta_variants(beta_oris: List[Quat], possible_beta_oris: List[List[Qua
     -------
     list of int:
         The variant count for the grain
-
 
     """
     if not possible_beta_oris:
@@ -383,8 +399,13 @@ def count_beta_variants(beta_oris: List[Quat], possible_beta_oris: List[List[Qua
     return variant_count
 
 
-def load_map(ebsd_path: str, min_grain_size: int = 3, boundary_tolerance: int = 3,
-             use_kuwahara: bool = False, kuwahara_tolerance: int = 5) -> ebsd.Map:
+def load_map(
+    ebsd_path: str,
+    min_grain_size: int = 3,
+    boundary_tolerance: int = 3,
+    use_kuwahara: bool = False,
+    kuwahara_tolerance: int = 5
+) -> ebsd.Map:
     """Load in EBSD data and do the required prerequisite computations."""
 
     ebsd_path = pathlib.Path(ebsd_path)
@@ -395,7 +416,7 @@ def load_map(ebsd_path: str, min_grain_size: int = 3, boundary_tolerance: int = 
     else:
         raise TypeError("Unknown EBSD map type. Can only read .ctf and .crc files.")
 
-    ebsd_map = ebsd.Map(ebsd_path.with_suffix(""), "hexagonal", dataType=map_type)
+    ebsd_map = ebsd.Map(ebsd_path.with_suffix(""), dataType=map_type)
     ebsd_map.buildQuatArray()
 
     if use_kuwahara:
@@ -411,28 +432,45 @@ def load_map(ebsd_path: str, min_grain_size: int = 3, boundary_tolerance: int = 
     return ebsd_map
 
 
-def assign_modal_variant(ebsd_map: ebsd.Map) -> ebsd.Map:
-    """Given a map of grains with variant counts, assign the prior beta orientation of the
-    grains to the variant with the highest count."""
+def assign_modal_variant(
+    ebsd_map: ebsd.Map,
+    alpha_phase_id: int = 0
+) -> ebsd.Map:
+    """Given a map of grains with variant counts, assign the prior beta
+    orientation of the grains to the variant with the highest count.
 
-    for grain in ebsd_map:
-        variantCount = np.array(grain.variantCount)
-        modeVariant = np.where(variantCount == np.max(variantCount))[0]
-        if len(modeVariant) == 1:
-            modeVariant = modeVariant[0]
-            parentBetaOri = grain.betaOris[modeVariant]
+    Parameters
+    ----------
+    ebsd_map
+        EBSD map to assign the beta variants for.
+    alpha_phase_id
+        Index of the alpha phase in the EBSD map.
+
+    """
+    alpha_grains = (grain for grain in ebsd_map
+                    if grain.phaseID == alpha_phase_id)
+    for grain in alpha_grains:
+        variant_count = grain.variantCount
+        mode_variant = np.where(variant_count == np.max(variant_count))[0]
+        if len(mode_variant) == 1:
+            mode_variant = mode_variant[0]
+            parent_beta_ori = grain.betaOris[mode_variant]
         else:
             #  multiple variants with same max
-            modeVariant = -1
-            parentBetaOri = Quat(1., 0., 0., 0.)
+            mode_variant = -1
+            parent_beta_ori = Quat(1., 0., 0., 0.)
 
-        grain.modeVariant = modeVariant
-        grain.parentBetaOri = parentBetaOri
+        grain.modeVariant = mode_variant
+        grain.parentBetaOri = parent_beta_ori
 
     return ebsd_map
 
 
-def assign_beta_variants(ebsd_map: ebsd.Map,  mode: str = "modal"):
+def assign_beta_variants(
+    ebsd_map: ebsd.Map,
+    mode: str = "modal",
+    alpha_phase_id: int = 0
+):
     """Given a map of grains with variant counts, determine the prior beta orientation of the
     grains.
 
@@ -443,22 +481,30 @@ def assign_beta_variants(ebsd_map: ebsd.Map,  mode: str = "modal"):
     mode
         How to perform beta orientation assignment
             'modal': The beta orientation is assigned to the variant with the highest count.
+    alpha_phase_id
+        Index of the alpha phase in the EBSD map.
 
     Returns
     --------
     ebsd.Map
         An ebsd map with the beta orientations assigned to grains.
-    """
 
+    """
     if mode == "modal":
-        ebsd_map = assign_modal_variant(ebsd_map)
+        ebsd_map = assign_modal_variant(ebsd_map, alpha_phase_id=alpha_phase_id)
     else:
         raise NotImplementedError(f"Mode '{mode}' is not a recognised way to assign variants.")
     print("Assignment of beta variants complete.")
     return ebsd_map
 
 
-def do_reconstruction(ebsd_map: ebsd.Map, mode: int = 1, burg_tol: float = 5, ori_tol: float = 3):
+def do_reconstruction(
+    ebsd_map: ebsd.Map,
+    mode: int = 1,
+    burg_tol: float = 5,
+    ori_tol: float = 3,
+    alpha_phase_id: int = 0
+):
     """Apply beta reconstruction to a ebsd map object.
 
     The reconstructed beta map is stored directly in the ebsd map (this should
@@ -476,9 +522,14 @@ def do_reconstruction(ebsd_map: ebsd.Map, mode: int = 1, burg_tol: float = 5, or
         Maximum deviation from the Burgers relation to allow (degrees)
     ori_tol: float
         Maximum deviation from a beta orientation (degrees)
+    alpha_phase_id: int
+        Index of the alpha phase in the EBSD map.
+
     """
     # this is the only function that interacts with the ebsd map/grain objects
-    for grain_id, grain in enumerate(tqdm(ebsd_map)):
+    alpha_grains = [grain for grain in ebsd_map
+                    if grain.phaseID == alpha_phase_id]
+    for grain in tqdm(alpha_grains):
 
         beta_oris = calc_beta_oris(grain.refOri)
         variant_count = np.zeros(6, dtype=int)
@@ -495,11 +546,14 @@ def do_reconstruction(ebsd_map: ebsd.Map, mode: int = 1, burg_tol: float = 5, or
 
                 beta_oris_l = calc_beta_oris(alpha_ori)
 
-                variant_count += count_beta_variants(beta_oris_l, [possible_beta_ori], ori_tol)
+                variant_count += count_beta_variants(
+                    beta_oris_l, [possible_beta_ori], ori_tol
+                )
 
         else:
-            neighbour_grains = list(ebsd_map.neighbourNetwork.neighbors(grain))
-            neighbour_oris = [grain.refOri for grain in neighbour_grains]
+            neighbour_grains = ebsd_map.neighbourNetwork.neighbors(grain)
+            neighbour_oris = [grain.refOri for grain in neighbour_grains
+                              if grain.phaseID == alpha_phase_id]
 
             # determine the possible beta orientations based on misorientation
             # between neighbouring alpha grains
