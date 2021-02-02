@@ -494,10 +494,11 @@ def assign_beta_variants(
 
 def do_reconstruction(
     ebsd_map: ebsd.Map,
-    mode: int = 1,
+    mode: str = 'mean',
     burg_tol: float = 5,
     ori_tol: float = 3,
-    alpha_phase_id: int = 0
+    alpha_phase_id: int = 0,
+    beta_phase_id: int = 1
 ):
     """Apply beta reconstruction to a ebsd map object.
 
@@ -518,17 +519,23 @@ def do_reconstruction(
         Maximum deviation from a beta orientation (degrees)
     alpha_phase_id: int
         Index of the alpha phase in the EBSD map.
+    beta_phase_id: int
+        Index of the beta phase in the EBSD map.
 
     """
     # this is the only function that interacts with the ebsd map/grain objects
     alpha_grains = [grain for grain in ebsd_map
                     if grain.phaseID == alpha_phase_id]
+    first = True
     for grain in tqdm(alpha_grains):
 
         beta_oris = calc_beta_oris(grain.refOri)
         variant_count = np.zeros(6, dtype=int)
 
         if mode == 'boundary':
+            if first:
+                print("Using boundary mode.")
+                first = False
             possible_beta_oris, beta_deviations, alpha_oris = \
                 calc_beta_oris_from_boundary_misori(
                     grain, ebsd_map.neighbourNetwork, ebsd_map.quatArray,
@@ -544,7 +551,24 @@ def do_reconstruction(
                     beta_oris_l, [possible_beta_ori], ori_tol
                 )
 
+        elif mode == 'beta':
+            if first:
+                print("Using beta mode.")
+                first = False
+            neighbour_grains = ebsd_map.neighbourNetwork.neighbors(grain)
+            neighbour_oris = [[grain.refOri] for grain in neighbour_grains
+                              if grain.phaseID == beta_phase_id]
+
+            possible_beta_oris = neighbour_oris
+            beta_deviations = [0.] * len(neighbour_oris)
+
+            variant_count += count_beta_variants(beta_oris, possible_beta_oris,
+                                                 ori_tol)
+
         else:
+            if first:
+                print("Using average mode.")
+                first = False
             neighbour_grains = ebsd_map.neighbourNetwork.neighbors(grain)
             neighbour_oris = [grain.refOri for grain in neighbour_grains
                               if grain.phaseID == alpha_phase_id]
@@ -555,7 +579,8 @@ def do_reconstruction(
                 grain.refOri, neighbour_oris, burg_tol=burg_tol
             )
 
-            variant_count += count_beta_variants(beta_oris, possible_beta_oris, ori_tol)
+            variant_count += count_beta_variants(beta_oris, possible_beta_oris,
+                                                 ori_tol)
 
         # save results in the grain objects
         grain.betaOris = beta_oris
