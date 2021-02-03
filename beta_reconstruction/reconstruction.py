@@ -389,13 +389,17 @@ def count_beta_variants(
     # flatten list of lists
     possible_beta_oris = [item for sublist in possible_beta_oris for item in sublist]
 
-    misorientations = np.empty((len(possible_beta_oris), 6))
+    misoris = np.empty((len(possible_beta_oris), 6))
     for ori_index, ori in enumerate(possible_beta_oris):
         for other_ori_index, other_ori in enumerate(beta_oris):
-            misorientations[ori_index, other_ori_index] = ori.misOri(other_ori, "cubic")
+            misoris[ori_index, other_ori_index] = ori.misOri(other_ori, "cubic")
 
-    max_misoris = np.nanargmax(misorientations, axis=1)
-    variant_count, _ = np.histogram(max_misoris, range(0, 7))
+    # max is actually min because actual misorientation is arccos of this
+    max_misoris_idx = np.nanargmax(misoris, axis=1)
+    max_misoris = misoris[np.arange(len(possible_beta_oris)), max_misoris_idx]
+    variant_count, _ = np.histogram(max_misoris_idx[max_misoris > ori_tol],
+                                    range(0, 7))
+
     return variant_count
 
 
@@ -562,8 +566,9 @@ def do_reconstruction(
             possible_beta_oris = neighbour_oris
             beta_deviations = [0.] * len(neighbour_oris)
 
-            variant_count += count_beta_variants(beta_oris, possible_beta_oris,
-                                                 ori_tol)
+            variant_count += count_beta_variants(
+                beta_oris, possible_beta_oris, ori_tol
+            )
 
         else:
             if first:
@@ -579,8 +584,9 @@ def do_reconstruction(
                 grain.refOri, neighbour_oris, burg_tol=burg_tol
             )
 
-            variant_count += count_beta_variants(beta_oris, possible_beta_oris,
-                                                 ori_tol)
+            variant_count += count_beta_variants(
+                beta_oris, possible_beta_oris, ori_tol
+            )
 
         # save results in the grain objects
         grain.betaOris = beta_oris
