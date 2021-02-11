@@ -283,6 +283,7 @@ def calc_beta_oris_from_boundary_misori(
     grain: ebsd.Grain,
     neighbour_network: nx.Graph,
     quat_array: np.ndarray,
+    alpha_phase_id : int,
     burg_tol: float = 5
 ) -> Tuple[List[List[Quat]], List[float], List[Quat]]:
     """Calculate the possible beta orientations for pairs of alpha and
@@ -321,7 +322,9 @@ def calc_beta_oris_from_boundary_misori(
     beta_devs = []
     alpha_oris = []
 
-    neighbour_grains = list(neighbour_network.neighbors(grain))
+    neighbour_grains = neighbour_network.neighbors(grain)
+    neighbour_grains = [grain for grain in neighbour_grains
+                        if grain.phaseID == alpha_phase_id]
     for neighbour_grain in neighbour_grains:
 
         bseg = neighbour_network[grain][neighbour_grain]['boundary']
@@ -496,9 +499,149 @@ def assign_beta_variants(
     print("Assignment of beta variants complete.")
 
 
+def construct_variant_map(
+    ebsd_map: ebsd.Map,
+    alpha_phase_id: int = 0
+) -> np.ndarray:
+    alpha_grains = (grain for grain in ebsd_map
+                    if grain.phaseID == alpha_phase_id)
+    all_lists = ((grain.grainID, grain.modeVariant) for grain in alpha_grains)
+    grain_ids, mode_variants = zip(*all_lists)
+
+    # points not part of a grain or other phases (-2) and
+    # those that were not reconstructed (-1)
+    return ebsd_map.grainDataToMapData(
+        mode_variants, grainIds=grain_ids, bg=-2
+    )
+
+
+def construct_beta_quat_array(
+    ebsd_map: ebsd.Map,
+    alpha_phase_id: int = 0,
+    variant_map: np.ndarray = None,
+) -> np.ndarray:
+    """Construct
+
+    Parameters
+    ----------
+    ebsd_map:
+        EBSD map to assign the beta variants for.
+    alpha_phase_id
+        Index of the alpha phase in the EBSD map.
+
+    """
+    if variant_map is None:
+        variant_map = construct_variant_map(ebsd_map, alpha_phase_id)
+
+    transformations = []
+    for sym in unq_hex_syms:
+        transformations.append(burg_trans * sym.conjugate)
+
+    beta_quat_array = np.empty_like(ebsd_map.quatArray)
+    for i in range(ebsd_map.yDim):
+        for j in range(ebsd_map.xDim):
+            variant = variant_map[i, j]
+            if variant < 0:
+                beta_quat_array[i, j] = Quat(1, 0, 0, 0)
+            else:
+                beta_quat_array[i, j] = transformations[variant] * \
+                                        ebsd_map.quatArray[i, j]
+
+    return beta_quat_array
+
+
+def create_beta_ebsd_map(
+    ebsd_map: ebsd.Map,
+    mode: str = 'only_beta',
+    beta_quat_array: np.ndarray = None,
+    variant_map: np.array = None,
+    alpha_phase_id: int = 0,
+    beta_phase_id: int = 1,
+) -> ebsd.Map:
+    """
+
+    Parameters
+    ----------
+    ebsd_map
+    mode
+        How to copy data from the input map
+            'alone': Only include the reconstructed beta
+            'append': Append reconstructed beta to present beta phase
+            'add': Create a new phase for reconstructed beta
+    beta_quat_array
+    variant_map
+    alpha_phase_id
+    beta_phase_id
+    """
+    if variant_map is None:
+        variant_map = construct_variant_map(
+            ebsd_map, alpha_phase_id=alpha_phase_id
+        )
+    if beta_quat_array is None:
+        beta_quat_array = construct_beta_quat_array(
+            ebsd_map, variant_map=variant_map
+        )
+
+    if mode == 'alone':
+        # Create map with only the reconstructed beta
+        new_phase = copy.copy(ebsd_map.phases[beta_phase_id])
+        new_phase.name += " (recon)"
+        phases = [new_phase]
+
+        out_phase_array = np.zeros_like(ebsd_map.phaseArray)
+        out_phase_array[variant_map >= 0] = 1
+
+        out_quat_array = beta_quat_array
+
+    elif mode == 'append':
+        # Append reconstructed beta to original beta phase
+        phases = copy.copy(ebsd_map.phases)
+
+        out_phase_array = np.copy(ebsd_map.phaseArray)
+        out_phase_array[variant_map >= 0] = beta_phase_id + 1
+
+        out_quat_array = np.where(variant_map >= 0, beta_quat_array,
+                                  ebsd_map.quatArray)
+
+    elif mode == 'add':
+        # Create addition phase for the reconstructed beta
+        phases = copy.copy(ebsd_map.phases)
+        new_phase = copy.copy(ebsd_map.phases[beta_phase_id])
+        new_phase.name += " (recon)"
+        phases.append(new_phase)
+
+        out_phase_array = np.copy(ebsd_map.phaseArray)
+        out_phase_array[variant_map >= 0] = ebsd_map.numPhases + 1
+
+        out_quat_array = np.where(variant_map >= 0, beta_quat_array,
+                                  ebsd_map.quatArray)
+
+    else:
+        raise ValueError(f"Unknown beta map construction mode '{mode}'")
+
+    out_euler_array = np.zeros((3,) + ebsd_map.shape)
+    for i in range(ebsd_map.yDim):
+        for j in range(ebsd_map.xDim):
+            out_euler_array[:, i, j] = out_quat_array[i, j].eulerAngles()
+
+    beta_ebsd_data = {
+        'stepSize': ebsd_map.stepSize,
+        'phases': phases,
+        'phase': out_phase_array,
+        'eulerAngle': out_euler_array,
+        'bandContrast': ebsd_map.bandContrastArray
+    }
+
+    # TODO: Change so quats can be loaded instead of going via Euler angles
+    beta_map = ebsd.Map(beta_ebsd_data, dataType="PythonDict")
+    beta_map.quatArray = out_quat_array
+
+    return beta_map
+
+
 def do_reconstruction(
     ebsd_map: ebsd.Map,
-    mode: str = 'mean',
+    mode: str = 'average',
     burg_tol: float = 5,
     ori_tol: float = 3,
     alpha_phase_id: int = 0,
@@ -517,6 +660,7 @@ def do_reconstruction(
         How to perform reconstruction
             'average': grain average orientations
             'boundary': grain boundary orientations
+            'beta': retained beta
     burg_tol
         Maximum deviation from the Burgers relation to allow (degrees)
     ori_tol: float
@@ -543,7 +687,7 @@ def do_reconstruction(
             possible_beta_oris, beta_deviations, alpha_oris = \
                 calc_beta_oris_from_boundary_misori(
                     grain, ebsd_map.neighbourNetwork, ebsd_map.quatArray,
-                    burg_tol=burg_tol
+                    alpha_phase_id, burg_tol=burg_tol
                 )
 
             for possible_beta_ori, beta_deviation, alpha_ori in zip(
@@ -570,7 +714,7 @@ def do_reconstruction(
                 beta_oris, possible_beta_oris, ori_tol
             )
 
-        else:
+        elif mode == 'average':
             if first:
                 print("Using average mode.")
                 first = False
@@ -587,6 +731,9 @@ def do_reconstruction(
             variant_count += count_beta_variants(
                 beta_oris, possible_beta_oris, ori_tol
             )
+
+        else:
+            raise ValueError(f"Unknown reconstruction mode '{mode}'")
 
         # save results in the grain objects
         grain.betaOris = beta_oris
