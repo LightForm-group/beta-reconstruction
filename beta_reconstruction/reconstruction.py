@@ -548,14 +548,13 @@ def construct_beta_quat_array(
         transformations.append(burg_trans * sym.conjugate)
 
     beta_quat_array = np.empty_like(ebsd_map.quatArray)
-    for i in range(ebsd_map.yDim):
-        for j in range(ebsd_map.xDim):
-            variant = variant_map[i, j]
-            if variant < 0:
-                beta_quat_array[i, j] = Quat(1, 0, 0, 0)
-            else:
-                beta_quat_array[i, j] = transformations[variant] * \
-                                        ebsd_map.quatArray[i, j]
+    for idx in np.ndindex(ebsd_map.shape):
+        variant = variant_map[idx]
+        if variant < 0:
+            beta_quat_array[idx] = Quat(1, 0, 0, 0)
+        else:
+            beta_quat_array[idx] = transformations[variant] * \
+                                    ebsd_map.quatArray[idx]
 
     return beta_quat_array
 

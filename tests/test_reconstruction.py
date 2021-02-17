@@ -1,8 +1,10 @@
 from typing import List
 
 import pytest
+from unittest.mock import Mock
 import numpy as np
 from defdap.quat import Quat
+from defdap import ebsd
 
 import beta_reconstruction.reconstruction as recon
 
@@ -327,3 +329,48 @@ class TestCountBetaVariants:
         expected_variant_count = [0, 3, 0, 1, 1, 0]
 
         assert all(np.equal(variant_count, expected_variant_count))
+
+
+class TestConstructBetaQuatArray:
+
+    def test_calc(self):
+        mock_map = Mock(spec=ebsd.Map)
+        mock_map.quatArray = np.array([
+            Quat([0.31666724, -0.91588522,  0.13405465, -0.20713635]),
+            Quat([0.17612928, -0.20214505, -0.21599713, -0.93886159]),
+            Quat([0.24967011, -0.224283,   -0.26045348, -0.90527673]),
+            Quat([0.68070418, -0.53435491,  0.23619103, -0.44195072]),
+            Quat([0.7293098,  -0.34952765, -0.07857021, -0.58289309]),
+            Quat([0.00169551,  0.14777021,  0.12010977,  0.98169992]),
+            Quat([0.47365417, -0.20536756, -0.20468846, -0.83161201]),
+            Quat([0.78776179, -0.27972705,  0.09209514, -0.54101999]),
+            Quat([0.33727506, -0.13311405, -0.13924545, -0.92148624]),
+            Quat([0.41137644, -0.85164404,  0.21420115, -0.24411007]),
+            Quat([0.26092708, -0.27640969, -0.29049792, -0.87813763]),
+            Quat([0.51237664, -0.62480323, -0.16679851, -0.56503925])
+        ]).reshape((3, 4))
+        mock_map.shape = mock_map.quatArray.shape
+        variant_map = np.array([[0,  3, -1,  1],
+                                [2,  2,  4,  4],
+                                [5, -1,  1,  2]])
+
+        beta_quat_array = recon.construct_beta_quat_array(
+            mock_map, variant_map=variant_map
+        )
+        expected_comps = [
+            np.array([0.3586687,  -0.42249045, -0.28570384,  0.78181321]),
+            np.array([0.04396812, -0.20834367, -0.45309011,  0.86566105]),
+            np.array([1.,          0.,          0.,          0.]),
+            np.array([0.13489744, -0.93982694,  0.30093181, -0.08926393]),
+            np.array([0.66997125, -0.66745906,  0.24828395,  0.2097427]),
+            np.array([0.46111146, -0.72030688, -0.25269131, -0.4524172]),
+            np.array([0.31807292,  0.2294237,  -0.791435,    0.46885503]),
+            np.array([0.1535714,  -0.26761921, -0.83850223,  0.44912114]),
+            np.array([0.51219503,  0.6609771,  -0.31826009, -0.44662741]),
+            np.array([1.,          0.,          0.,          0.]),
+            np.array([0.26763438, -0.77098237, -0.48040495, -0.32119948]),
+            np.array([0.56407948, -0.75208451, -0.06296879,  0.33498979])
+        ]
+
+        assert all([np.allclose(quat.quatCoef, row) for quat, row
+                    in zip(beta_quat_array.flat, expected_comps)])
