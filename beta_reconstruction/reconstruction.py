@@ -522,15 +522,36 @@ def construct_beta_quat_array(
     transformations = []
     for sym in unq_hex_syms:
         transformations.append(burg_trans * sym.conjugate)
+    trans_comps = Quat.extract_quat_comps(transformations)
+    trans_comps = trans_comps[:, variant_map[variant_map >= 0]]
+
+    quat_comps = Quat.extract_quat_comps(ebsd_map.quatArray[variant_map >= 0])
+    quat_comps_beta = np.empty_like(quat_comps)
+
+    # transformations[variant] * quat
+    quat_comps_beta[0, :] = (trans_comps[0, :] * quat_comps[0, :]
+                             - trans_comps[1, :] * quat_comps[1, :]
+                             - trans_comps[2, :] * quat_comps[2, :]
+                             - trans_comps[3, :] * quat_comps[3, :])
+    quat_comps_beta[1, :] = (trans_comps[1, :] * quat_comps[0, :]
+                             + trans_comps[0, :] * quat_comps[1, :]
+                             - trans_comps[3, :] * quat_comps[2, :]
+                             + trans_comps[2, :] * quat_comps[3, :])
+    quat_comps_beta[2, :] = (trans_comps[2, :] * quat_comps[0, :]
+                             + trans_comps[0, :] * quat_comps[2, :]
+                             - trans_comps[1, :] * quat_comps[3, :]
+                             + trans_comps[3, :] * quat_comps[1, :])
+    quat_comps_beta[3, :] = (trans_comps[3, :] * quat_comps[0, :]
+                             + trans_comps[0, :] * quat_comps[3, :]
+                             - trans_comps[2, :] * quat_comps[1, :]
+                             + trans_comps[1, :] * quat_comps[2, :])
+    # swap into positive hemisphere if required
+    quat_comps_beta[:, quat_comps_beta[0, :] < 0] *= -1
 
     beta_quat_array = np.empty_like(ebsd_map.quatArray)
-    for idx in np.ndindex(ebsd_map.shape):
-        variant = variant_map[idx]
-        if variant < 0:
-            beta_quat_array[idx] = Quat(1, 0, 0, 0)
-        else:
-            beta_quat_array[idx] = transformations[variant] * \
-                                    ebsd_map.quatArray[idx]
+    beta_quat_array[variant_map < 0] = Quat(1, 0, 0, 0)
+    for i, idx in enumerate(zip(*np.where(variant_map >= 0))):
+        beta_quat_array[idx] = Quat(quat_comps_beta[:, i])
 
     return beta_quat_array
 
