@@ -439,10 +439,7 @@ def load_map(
     return ebsd_map
 
 
-def assign_modal_variant(
-    ebsd_map: ebsd.Map,
-    alpha_phase_id: int = 0
-):
+def modal_variant(alpha_grains: List[ebsd.Grain]) -> np.ndarray:
     """Given a map of grains with variant counts, assign the prior beta
     orientation of the grains to the variant with the highest count.
 
@@ -454,21 +451,19 @@ def assign_modal_variant(
         Index of the alpha phase in the EBSD map.
 
     """
-    alpha_grains = (grain for grain in ebsd_map
-                    if grain.phaseID == alpha_phase_id)
-    for grain in alpha_grains:
-        variant_count = grain.variantCount
+    modal_variants = np.empty(len(alpha_grains), dtype=np.int8)
+    for i, grain in enumerate(alpha_grains):
+        variant_count = grain.variant_count
         mode_variant = np.where(variant_count == np.max(variant_count))[0]
         if len(mode_variant) == 1:
             mode_variant = mode_variant[0]
-            parent_beta_ori = grain.betaOris[mode_variant]
         else:
             #  multiple variants with same max
             mode_variant = -1
-            parent_beta_ori = Quat(1., 0., 0., 0.)
+        modal_variants[i] = mode_variant
 
-        grain.modeVariant = mode_variant
-        grain.parentBetaOri = parent_beta_ori
+    # TODO: Change modeVariant to assigned_variant
+    return modal_variants
 
 
 def assign_beta_variants(
@@ -491,11 +486,26 @@ def assign_beta_variants(
         Index of the alpha phase in the EBSD map.
 
     """
+    alpha_grains = [grain for grain in ebsd_map
+                    if grain.phaseID == alpha_phase_id]
     if mode == "modal":
-        assign_modal_variant(ebsd_map, alpha_phase_id=alpha_phase_id)
+        assigned_variants = modal_variant(alpha_grains)
     else:
         raise NotImplementedError(f"Mode '{mode}' is not a recognised "
                                   f"way to assign variants.")
+
+    for grain, assigned_variant in zip(alpha_grains, assigned_variants):
+        if assigned_variant >= 0:
+            parent_beta_ori = grain.beta_oris[assigned_variant]
+        else:
+            # parent_beta_ori = Quat(1., 0., 0., 0.)
+            parent_beta_ori = None
+
+        grain.assigned_variant = assigned_variant
+        grain.parent_beta_ori = parent_beta_ori
+        # grain.modeVariant = mode_variant
+        # grain.parentBetaOri = parent_beta_ori
+
     print("Assignment of beta variants complete.")
 
 
@@ -505,13 +515,13 @@ def construct_variant_map(
 ) -> np.ndarray:
     alpha_grains = (grain for grain in ebsd_map
                     if grain.phaseID == alpha_phase_id)
-    all_lists = ((grain.grainID, grain.modeVariant) for grain in alpha_grains)
-    grain_ids, mode_variants = zip(*all_lists)
+    all_lists = ((grain.grainID, grain.assigned_variant) for grain in alpha_grains)
+    grain_ids, assigned_variants = zip(*all_lists)
 
     # points not part of a grain or other phases (-2) and
     # those that were not reconstructed (-1)
     return ebsd_map.grainDataToMapData(
-        mode_variants, grainIds=grain_ids, bg=-2
+        assigned_variants, grainIds=grain_ids, bg=-2
     )
 
 
@@ -736,7 +746,7 @@ def do_reconstruction(
             raise ValueError(f"Unknown reconstruction mode '{mode}'")
 
         # save results in the grain objects
-        grain.betaOris = beta_oris
-        grain.possibleBetaOris = possible_beta_oris
-        grain.betaDeviations = beta_deviations
-        grain.variantCount = variant_count
+        grain.beta_oris = beta_oris
+        grain.possible_beta_oris = possible_beta_oris
+        grain.beta_deviations = beta_deviations
+        grain.variant_count = variant_count
