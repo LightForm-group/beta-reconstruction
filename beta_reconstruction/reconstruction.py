@@ -36,30 +36,6 @@ def calc_beta_oris(alpha_ori: Quat) -> List[Quat]:
     return beta_oris
 
 
-def construct_quat_comps(oris: List[Quat]) -> np.ndarray:
-    """Return a NumPy array of the provided quaternion components
-
-    Input quaternions may be given as a list of Quat objects or any iterable
-    whose items have 4 components which map to the quaternion.
-
-    Parameters
-    ----------
-    oris
-        A list of Quat objects to return the components of
-
-    Returns
-    -------
-    np.ndarray
-        Array of quaternion components, shape (4, n)
-
-    """
-    quat_comps = np.empty((4, len(oris)))
-    for i, ori in enumerate(oris):
-        quat_comps[:, i] = ori.quatCoef
-
-    return quat_comps
-
-
 def beta_oris_from_cub_sym(
     alpha_ori: Quat,
     unq_cub_sym_idx: int,
@@ -153,7 +129,7 @@ def calc_misori_of_variants(
     # Vectorised calculation of:
     # hex_sym[j].inv * ((neighbour_ori * alpha_ori_inv) * hex_sym[i])
     # labelled: d = h2.inv * (c * h1)
-    hex_sym_comps = construct_quat_comps(hex_syms)
+    hex_sym_comps = Quat.extract_quat_comps(hex_syms)
     c = (neighbour_ori * alpha_ori_inv).quatCoef
     h1 = np.repeat(hex_sym_comps, 12, axis=1)  # outer loop
     h2 = np.tile(hex_sym_comps, (1, 12))  # inner loop
@@ -248,7 +224,7 @@ def calc_beta_oris_from_misori(
     """
     burg_tol *= np.pi / 180.
     # This needed to move further up calculation process
-    unq_cub_sym_comps = construct_quat_comps(unq_cub_syms)
+    unq_cub_sym_comps = Quat.extract_quat_comps(unq_cub_syms)
 
     alpha_ori_inv = alpha_ori.conjugate
 
@@ -316,7 +292,7 @@ def calc_beta_oris_from_boundary_misori(
 
     """
     # This needed to move further up calculation process
-    unq_cub_sym_comps = construct_quat_comps(unq_cub_syms)
+    unq_cub_sym_comps = Quat.extract_quat_comps(unq_cub_syms)
 
     beta_oris = []
     beta_devs = []

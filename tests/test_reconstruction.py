@@ -97,27 +97,6 @@ class TestCalcBetaOris:
                     in zip(beta_oris, expected_comps)])
 
 
-class TestConstructQuatComps:
-    """Test the method that returns a NumPy array from a list of Quats."""
-    @staticmethod
-    def test_return_type(ori_quat_list_valid):
-        quat_comps = recon.construct_quat_comps(ori_quat_list_valid)
-
-        assert type(quat_comps) is np.ndarray
-        assert quat_comps.shape == (4, len(ori_quat_list_valid))
-
-    @staticmethod
-    def test_calc(ori_quat_list_valid):
-        quat_comps = recon.construct_quat_comps(ori_quat_list_valid)
-
-        expected_comps = np.array([
-            [0.22484510, 0.45464871, -0.70807342, 0.49129550],
-            [0.36520321, 0.25903472, -0.40342268, 0.79798357]
-        ]).T
-
-        assert np.allclose(quat_comps, expected_comps)
-
-
 class TestBetaOrientationsFromCubicSymmetry:
     @staticmethod
     def test_return_1_ori_return_type(ori_single_valid: Quat):
