@@ -7,9 +7,14 @@ setup(
     url='github.com/LightForm-group/beta-reconstruction',
     license='MIT',
     author='Michael D. Atkinson',
-    author_email='michael.atkinson@manchesterr.ac.uk',
+    author_email='michael.atkinson@manchester.ac.uk',
     install_requires=[
         'numpy',
-        'defdap'
-    ]
+        'networkx',
+        'defdap>=0.93.0',
+        'tqdm',
+    ],
+    extras_require={
+        'testing': ['pytest']
+    }
 )

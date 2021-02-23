@@ -1,0 +1,7 @@
+numpy
+DefDAP
+setuptools
+networkx
+pytest
+tqdm
+pyqt5
