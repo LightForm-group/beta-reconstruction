@@ -10,9 +10,11 @@ setup(
     author_email='michael.atkinson@manchester.ac.uk',
     install_requires=[
         'numpy',
-        'defdap',
-        'pytest',
+        'networkx',
+        'defdap>=0.93.0',
         'tqdm',
-        'pyqt5'
-    ]
+    ],
+    extras_require={
+        'testing': ['pytest']
+    }
 )
