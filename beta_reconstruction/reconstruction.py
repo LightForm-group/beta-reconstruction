@@ -1,5 +1,6 @@
 from typing import List, Tuple
 import pathlib
+import copy
 
 import numpy as np
 import networkx as nx
@@ -420,10 +421,12 @@ def modal_variant(alpha_grains: List[ebsd.Grain]) -> np.ndarray:
 
     Parameters
     ----------
-    ebsd_map
-        EBSD map to assign the beta variants for.
-    alpha_phase_id
-        Index of the alpha phase in the EBSD map.
+    alpha_grains
+        Grains to calculate modal variant
+
+    Returns
+    -------
+    Array of the modal variants
 
     """
     modal_variants = np.empty(len(alpha_grains), dtype=np.int8)
@@ -437,7 +440,6 @@ def modal_variant(alpha_grains: List[ebsd.Grain]) -> np.ndarray:
             mode_variant = -1
         modal_variants[i] = mode_variant
 
-    # TODO: Change modeVariant to assigned_variant
     return modal_variants
 
 
@@ -473,13 +475,10 @@ def assign_beta_variants(
         if assigned_variant >= 0:
             parent_beta_ori = grain.beta_oris[assigned_variant]
         else:
-            # parent_beta_ori = Quat(1., 0., 0., 0.)
             parent_beta_ori = None
 
         grain.assigned_variant = assigned_variant
         grain.parent_beta_ori = parent_beta_ori
-        # grain.modeVariant = mode_variant
-        # grain.parentBetaOri = parent_beta_ori
 
     print("Assignment of beta variants complete.")
 
